@@ -71,6 +71,6 @@ export const allBooks: MergedBook[] = [
     published_date: '1965-08-01',
     page_count: 412,
     subjects: ['Science Fiction', 'Classic', 'Fantasy'],
-    cover_image_id: 'dune',
+    cover_image_id: 'dune-cover',
   },
 ];

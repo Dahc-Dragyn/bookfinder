@@ -35,6 +35,12 @@
       "description": "Book cover for Dune",
       "imageUrl": "https://images.unsplash.com/photo-1621351183012-e2f9972dd9bf?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw4fHxib29rJTIwY292ZXJ8ZW58MHx8fHwxNzYzNDYwMjAyfDA&ixlib=rb-4.1.0&q=80&w=1080",
       "imageHint": "book cover"
+    },
+    {
+      "id": "dune-cover",
+      "description": "Book cover for Dune",
+      "imageUrl": "https://images.unsplash.com/photo-1593481768779-45a897fa4286?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxfHxkZXNlcnQlMjBwbGFuZXR8ZW58MHx8fHwxNzE5NDI4Mjk0fDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "desert planet"
     }
   ]
 }
