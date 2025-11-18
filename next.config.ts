@@ -1,7 +1,6 @@
 import type {NextConfig} from 'next';
 
 const nextConfig: NextConfig = {
-  /* config options here */
   typescript: {
     ignoreBuildErrors: true,
   },
@@ -10,6 +9,7 @@ const nextConfig: NextConfig = {
   },
   images: {
     remotePatterns: [
+      // Placeholder domains (optional, but keep for now)
       {
         protocol: 'https',
         hostname: 'placehold.co',
@@ -28,6 +28,26 @@ const nextConfig: NextConfig = {
         port: '',
         pathname: '/**',
       },
+      // --- CRITICAL BOOKFINDER API DOMAINS ---
+      {
+        protocol: 'https',
+        hostname: 'covers.openlibrary.org', // Used by your API for cover_url
+        port: '',
+        pathname: '/b/isbn/**'
+      },
+      {
+        protocol: 'https',
+        hostname: 'books.google.com', // Used by Google Books thumbnail links
+        port: '',
+        pathname: '/**'
+      },
+      {
+        // Added this one as a catch-all since your deployment URL is custom
+        protocol: 'https',
+        hostname: 'db4f-24-22-90-227.ngrok-free.app',
+        port: '',
+        pathname: '/**'
+      }
     ],
   },
 };

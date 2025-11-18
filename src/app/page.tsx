@@ -10,8 +10,9 @@ async function NewReleases() {
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4 md:gap-6">
-      {newReleases.map((book) => (
-        <BookCard key={book.isbn_13} book={book} />
+      {newReleases.map((book, i) => (
+        // *** FIX: Use index as fallback key if ISBN is missing ***
+        <BookCard key={book.isbn_13 || `home-book-${i}`} book={book} />
       ))}
     </div>
   );
