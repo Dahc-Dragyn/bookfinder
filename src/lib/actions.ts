@@ -18,6 +18,18 @@ export async function getNewReleases(): Promise<MergedBook[]> {
     .slice(0, 6);
 }
 
+export async function getAllNewReleases(): Promise<MergedBook[]> {
+  await sleep(500);
+  // Sort by published date descending
+  return [...allBooks]
+    .sort(
+      (a, b) =>
+        new Date(b.published_date!).getTime() -
+        new Date(a.published_date!).getTime()
+    );
+}
+
+
 export async function getBookByIsbn(
   isbn: string
 ): Promise<MergedBook | null> {
