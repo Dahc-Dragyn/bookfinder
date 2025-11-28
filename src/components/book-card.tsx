@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { Card, CardContent } from '@/components/ui/card';
-import { Book, ImageOff } from 'lucide-react';
+import { Book } from 'lucide-react'; // Removed ImageOff
 import type { SearchResultItem } from '@/lib/types';
 
 interface BookCardProps {
@@ -9,16 +9,13 @@ interface BookCardProps {
 }
 
 export default function BookCard({ book }: BookCardProps) {
-  // 1. Safety Check: If title looks like HTML/Garbage, sanitize it for the placeholder
   const cleanTitle = book.title.replace(/<[^>]*>?/gm, '').substring(0, 50);
-  
-  // 2. Construct Placeholder: Use a clean, encoded title
   const placeholderSrc = `https://placehold.co/400x600/e2e8f0/1e293b?text=${encodeURIComponent(cleanTitle || 'No Title')}`;
-  
-  // 3. Decide Cover Source: API URL -> Placeholder
   const coverSrc = book.cover_url || placeholderSrc;
-
   const hasLink = !!book.isbn_13;
+
+  // --- FIX: Handle Author Objects ---
+  const authorNames = book.authors?.map(a => a.name).join(', ') || 'Unknown Author';
 
   return (
     <Link 
@@ -39,7 +36,6 @@ export default function BookCard({ book }: BookCardProps) {
                 unoptimized={true} 
               />
             ) : (
-              // Fallback icon if API explicitly returned no URL
               <div className="text-muted-foreground flex flex-col items-center text-center p-4">
                 <Book className="h-12 w-12 mb-2 opacity-20" />
                 <span className="text-xs font-semibold opacity-40">{cleanTitle}</span>
@@ -51,8 +47,8 @@ export default function BookCard({ book }: BookCardProps) {
             <p className="font-bold font-headline truncate text-sm md:text-base" title={book.title}>
               {cleanTitle}
             </p>
-            <p className="text-xs text-muted-foreground truncate">
-              {book.authors && book.authors.length > 0 ? book.authors.join(', ') : 'Unknown Author'}
+            <p className="text-xs text-muted-foreground truncate" title={authorNames}>
+              {authorNames}
             </p>
           </div>
         </CardContent>

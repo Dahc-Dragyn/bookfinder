@@ -1,45 +1,48 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from "next/server";
 
-async function handler(req: NextRequest) {
-  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_API_URL;
-  if (!backendUrl) {
-    return new NextResponse('Backend API URL is not configured.', { status: 500 });
+export async function GET(req: Request) {
+  const { searchParams } = new URL(req.url);
+  const img = searchParams.get("url");
+
+  if (!img) {
+    return new NextResponse("Missing image URL", { status: 400 });
   }
-
-  // 1. Strip the proxy prefix (e.g., '/api-proxy/health' becomes '/health')
-  const requestedPath = req.nextUrl.pathname.replace(/^\/api-proxy/, '');
-  
-  // 2. Map to the final target URL, including the /books prefix
-  // Example: https://db4f.../books/health
-  // The 'requestedPath' is now '/health'
-  const targetUrl = `${backendUrl}/books${requestedPath}${req.nextUrl.search}`;
-  
-  const headers = new Headers(req.headers);
-  headers.set('host', new URL(targetUrl).host);
-  headers.set('ngrok-skip-browser-warning', 'true');
-  headers.set('Connection', 'keep-alive');
-  
-  // Remove the Authorization header to prevent accidentally forwarding a user's sensitive token
-  // to an untrusted external API, which could happen if we eventually add user auth.
-  headers.delete('Authorization');
-
-  const body = req.method !== 'GET' && req.method !== 'HEAD' ? await req.blob() : undefined;
 
   try {
-    const response = await fetch(targetUrl, {
-      method: req.method,
-      headers: headers,
-      body: body,
-      redirect: 'follow'
-    });
+    // 1. Force HTTPS (Google often redirects HTTP -> HTTPS anyway, but let's be explicit)
+    let targetUrl = img.replace("http://", "https://");
     
-    return response;
+    // 2. Google Books Specific: Remove the "curled page" effect for a cleaner image
+    if (targetUrl.includes('books.google.com')) {
+       targetUrl = targetUrl.replace('&edge=curl', '');
+    }
 
-  } catch (error) {
-    console.error('API proxy error:', error);
-    return new NextResponse('Proxy request failed.', { status: 502 });
+    // 3. Fetch the image from the external source
+    // We use 'fetch' here so the SERVER talks to Google (Server-to-Server is secure)
+    const response = await fetch(targetUrl);
+    
+    if (!response.ok) {
+        return new NextResponse("Failed to fetch image", { status: response.status });
+    }
+
+    // 4. Get the content type (e.g., image/jpeg)
+    const contentType = response.headers.get("content-type") || "image/jpeg";
+    
+    // 5. Get the image data as a buffer
+    const buffer = await response.arrayBuffer();
+
+    // 6. Return the image directly to the browser
+    return new NextResponse(buffer, {
+      status: 200,
+      headers: {
+        "Content-Type": contentType,
+        // Cache it aggressively (1 day) so we don't hammer Google's servers
+        "Cache-Control": "public, max-age=86400, stale-while-revalidate=3600",
+      }
+    });
+
+  } catch (err) {
+    console.error("Proxy error:", err);
+    return new NextResponse("Failed to load image", { status: 500 });
   }
 }
-
-// Export handler for all HTTP methods
-export { handler as GET, handler as POST, handler as PUT, handler as PATCH, handler as DELETE };

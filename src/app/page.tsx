@@ -40,7 +40,7 @@ export default function Home() {
           <Logo />
         </div>
         <p className="text-lg text-muted-foreground mt-2">
-          Your AI-powered guide to the world of books.
+        "Tired of being 'personalized'? We're just a search engine. The smarter you are, the better it works."
         </p>
       </header>
 

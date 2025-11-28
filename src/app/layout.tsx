@@ -4,9 +4,9 @@ import './globals.css';
 import { cn } from '@/lib/utils';
 
 export const metadata: Metadata = {
-  title: 'LibrarianAI',
+  title: 'Algorithm-Free Book Search',
   description:
-    'An intelligent book discovery platform with AI-powered summaries and recommendations.',
+    'Algorithm-Free Book Search',
 };
 
 export default function RootLayout({

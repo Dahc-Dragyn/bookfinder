@@ -1,3 +1,4 @@
+// src/lib/actions.ts
 'use server';
 
 import type { MergedBook, HybridSearchResponse, SearchResultItem } from '@/lib/types';
@@ -8,16 +9,18 @@ const API_BASE = (process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://127.0.0.1:8
 
 // --- HELPER: The Quality Gate ---
 function isValidBook(book: SearchResultItem): boolean {
-  // 1. Must have an ISBN (13 is preferred, but we need at least one ID to link to)
+  // 1. Must have an ISBN
   if (!book.isbn_13 && !book.isbn_10) return false;
 
-  // 2. Must have an Author
-  if (!book.authors || book.authors.length === 0 || book.authors.includes('Unknown Author')) return false;
+  // 2. Must have an Author (Check the new array structure)
+  if (!book.authors || book.authors.length === 0) return false;
+  const firstAuthorName = book.authors[0].name;
+  if (firstAuthorName === 'Unknown Author') return false;
 
-  // 3. Title Sanity Check (Filter out HTML/CSS injections)
+  // 3. Title Sanity Check
   if (book.title.includes('<') || book.title.includes('{') || book.title.length > 150) return false;
   
-  // 4. Specific Noise Filters (Titles that are clearly not books we want)
+  // 4. Specific Noise Filters
   const lowerTitle = book.title.toLowerCase();
   if (lowerTitle === 'history' || lowerTitle.includes('report') || lowerTitle.includes('document')) return false;
 
@@ -26,18 +29,21 @@ function isValidBook(book: SearchResultItem): boolean {
 
 // --- HELPER: Sorting Strategy ---
 function sortQualityBooks(a: SearchResultItem, b: SearchResultItem): number {
-  // Prioritize books that have a cover URL
+  // Prioritize books with covers
   if (a.cover_url && !b.cover_url) return -1;
   if (!a.cover_url && b.cover_url) return 1;
+  
+  // Secondary sort: Rating
+  if ((a.average_rating || 0) > (b.average_rating || 0)) return -1;
+  if ((a.average_rating || 0) < (b.average_rating || 0)) return 1;
+  
   return 0;
 }
 
 async function fetcher(url: string): Promise<any> {
   const response = await fetch(url, { 
     cache: 'no-store', 
-    headers: {
-      'ngrok-skip-browser-warning': 'true' 
-    }
+    headers: { 'ngrok-skip-browser-warning': 'true' }
   });
 
   if (!response.ok) {
@@ -52,10 +58,11 @@ async function fetcher(url: string): Promise<any> {
 // ACTIONS
 // ---------------------------------------------
 
-export async function getNewReleases(): Promise<SearchResultItem[]> {
-  // STRATEGY CHANGE: Ask for "fiction" by default to get higher quality "new" books
+export async function getNewReleases(startIndex: number = 0): Promise<SearchResultItem[]> {
+  // Fetch more than we need to account for filtering
+  const limit = 20; 
   const data: HybridSearchResponse = await fetcher(
-    `${API_BASE}/new-releases?subject=fiction&limit=20`
+    `${API_BASE}/new-releases?subject=fiction&limit=${limit}&startIndex=${startIndex}`
   );
   
   const rawResults = data?.results || [];
@@ -63,21 +70,18 @@ export async function getNewReleases(): Promise<SearchResultItem[]> {
   return rawResults
     .filter(isValidBook)
     .sort(sortQualityBooks)
-    .slice(0, 6); // Return top 6 high-quality items
+    .slice(0, 10); // Return clean list
 }
 
-export async function getAllNewReleases(subject?: string): Promise<SearchResultItem[]> {
-  // Default to "fiction" if no subject is provided, to avoid the "firehose of trash"
+export async function getAllNewReleases(subject?: string, startIndex: number = 0): Promise<SearchResultItem[]> {
   const effectiveSubject = subject || 'fiction';
   const subjectQuery = `&subject=${encodeURIComponent(effectiveSubject)}`;
   
   const data: HybridSearchResponse = await fetcher(
-    `${API_BASE}/new-releases?limit=20${subjectQuery}`
+    `${API_BASE}/new-releases?limit=20&startIndex=${startIndex}${subjectQuery}`
   );
 
-  const rawResults = data?.results || [];
-
-  return rawResults
+  return (data?.results || [])
     .filter(isValidBook)
     .sort(sortQualityBooks);
 }
@@ -87,19 +91,18 @@ export async function getBookByIsbn(isbn: string): Promise<MergedBook | null> {
   return book;
 }
 
-export async function searchBooks(query: string, subject?: string): Promise<SearchResultItem[]> {
+export async function searchBooks(query: string, subject?: string, startIndex: number = 0): Promise<SearchResultItem[]> {
   if (!query) return [];
   
   const subjectQuery = subject ? `&subject=${encodeURIComponent(subject)}` : '';
 
   const data: HybridSearchResponse = await fetcher(
-    `${API_BASE}/search?q=${encodeURIComponent(query)}${subjectQuery}&limit=20`
+    `${API_BASE}/search?q=${encodeURIComponent(query)}${subjectQuery}&limit=20&startIndex=${startIndex}`
   );
   
   const rawResults = data?.results || [];
 
-  // We are slightly less strict on Search (user might be looking for obscure stuff)
   return rawResults
-    .filter(book => book.isbn_13 || book.isbn_10) // Search results MUST be clickable
+    .filter(book => book.isbn_13 || book.isbn_10)
     .sort(sortQualityBooks);
 }
