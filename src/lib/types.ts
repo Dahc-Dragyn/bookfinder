@@ -3,6 +3,7 @@
 export interface AuthorItem {
   name: string;
   key?: string | null;
+  bio?: string | null; // NEW: Added for v1.8 Author Bio feature
 }
 
 export interface GoogleCoverLinks {
@@ -51,7 +52,7 @@ export interface AccessInfo {
 export interface MergedBook {
   title: string;
   subtitle?: string;
-  authors: AuthorItem[]; // UPDATED: Now a list of objects, not strings
+  authors: AuthorItem[]; 
   isbn_13: string;
   isbn_10?: string;
   google_book_id?: string;
@@ -62,7 +63,7 @@ export interface MergedBook {
   average_rating?: number;
   ratings_count?: number;
   
-  // New Rich Metadata
+  // Rich Metadata
   dimensions?: Dimensions;
   sale_info?: SaleInfo;
   access_info?: AccessInfo;
@@ -76,7 +77,7 @@ export interface MergedBook {
 export interface SearchResultItem {
   title: string;
   subtitle?: string;
-  authors: AuthorItem[]; // UPDATED
+  authors: AuthorItem[];
   isbn_13?: string;
   isbn_10?: string;
   publisher?: string;

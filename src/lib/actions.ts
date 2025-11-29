@@ -106,3 +106,10 @@ export async function searchBooks(query: string, subject?: string, startIndex: n
     .filter(book => book.isbn_13 || book.isbn_10)
     .sort(sortQualityBooks);
 }
+
+export async function getFictionGenres(): Promise<{ name: string; umbrella: string }[]> {
+  // We strip '/books' because the genres endpoint is at the root /genres/fiction
+  const baseUrl = API_BASE.replace('/books', '');
+  const data = await fetcher(`${baseUrl}/genres/fiction`);
+  return data || [];
+}
