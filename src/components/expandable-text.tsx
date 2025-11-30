@@ -13,6 +13,11 @@ interface ExpandableTextProps {
 
 export default function ExpandableText({ text, limit = 300, className }: ExpandableTextProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  
+  if (!text) {
+    return <p className="text-muted-foreground italic">No description available.</p>;
+  }
+
   const shouldTruncate = text.length > limit;
 
   if (!shouldTruncate) {
@@ -28,23 +33,22 @@ export default function ExpandableText({ text, limit = 300, className }: Expanda
     <div className={cn("space-y-2", className)}>
       <div 
         className={cn(
-          "prose dark:prose-invert max-w-none text-muted-foreground leading-relaxed relative transition-all duration-500",
-          !isExpanded ? "max-h-[150px] overflow-hidden" : ""
+          "prose dark:prose-invert max-w-none text-muted-foreground leading-relaxed relative transition-all duration-300",
+          !isExpanded ? "max-h-[100px] overflow-hidden" : "max-h-full"
         )}
       >
         <div dangerouslySetInnerHTML={{ __html: text }} />
         
-        {/* Gradient Fade Effect */}
         {!isExpanded && (
-           <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-background to-transparent pointer-events-none" />
+           <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-card to-transparent pointer-events-none" />
         )}
       </div>
       
       <Button 
-        variant="ghost" 
+        variant="link" 
         size="sm" 
         onClick={() => setIsExpanded(!isExpanded)}
-        className="text-primary font-medium h-auto p-0 hover:bg-transparent hover:underline flex items-center gap-1"
+        className="text-primary h-auto p-0 flex items-center gap-1"
       >
         {isExpanded ? (
           <>Show Less <ChevronUp className="h-3 w-3" /></>
