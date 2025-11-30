@@ -1,23 +1,20 @@
 import { getBookByIsbn, searchBooks } from '@/lib/actions';
-import { notFound } from 'next/navigation';
-import Image from 'next/image';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { 
   ArrowLeft, ShoppingCart, Star, Calendar, BookOpen, 
-  Layers, Hash, User 
+  Layers, Hash, User, Sparkles, BookType, Ruler, Globe, Library, ExternalLink
 } from 'lucide-react';
 import BookCard from '@/components/book-card';
 import ExpandableText from '@/components/expandable-text';
+import BookCover from '@/components/book-cover'; // NEW IMPORT
 
 // --- Helper Component: More By Author ---
 async function MoreByAuthor({ authorName, currentIsbn }: { authorName: string, currentIsbn: string }) {
-  // Fetch books by this author
   const books = await searchBooks(`inauthor:"${authorName}"`);
   
-  // Filter out the current book
   const otherBooks = books
     .filter(b => b.isbn_13 !== currentIsbn)
     .slice(0, 5);
@@ -51,7 +48,7 @@ export default async function BookDetailPage({
       <main className="container mx-auto px-4 py-16 text-center min-h-[60vh] flex flex-col items-center justify-center">
         <h1 className="text-4xl font-bold font-headline mb-4">Book Not Found</h1>
         <p className="text-muted-foreground mb-8 text-lg max-w-md mx-auto">
-          We couldn't find detailed information for ISBN <span className="font-mono text-foreground">{isbn}</span>.
+          We couldn&apos;t find detailed information for ISBN <span className="font-mono text-foreground">{isbn}</span>.
         </p>
         <Button asChild variant="outline" size="lg">
             <Link href="/">
@@ -66,34 +63,37 @@ export default async function BookDetailPage({
   const primaryAuthor = book.authors?.[0];
   const authorName = primaryAuthor?.name || 'Unknown Author';
   const allAuthors = book.authors?.map(a => a.name).join(', ');
-  const authorBio = primaryAuthor?.bio; // This is the new field from Backend v1.8!
+  const authorBio = primaryAuthor?.bio;
   
-  // Rating Logic
   const rating = book.average_rating || 0;
   const ratingCount = book.ratings_count || 0;
 
-  // Image Logic: Smart Selection
-  let rawCoverUrl = 
+  // --- IMAGE LOGIC ---
+  // Select best available URL, prefer Large/ExtraLarge
+  const rawCoverUrl = 
     book.google_cover_links?.extraLarge ||
     book.google_cover_links?.large ||
     book.google_cover_links?.medium ||
-    book.open_library_cover_links?.large ||
-    book.open_library_cover_links?.medium ||
     book.google_cover_links?.small ||
     book.google_cover_links?.thumbnail ||
+    book.open_library_cover_links?.large ||
+    book.open_library_cover_links?.medium ||
     book.open_library_cover_links?.small;
 
-  // Image Cleanup
-  if (rawCoverUrl) {
-    if (rawCoverUrl.startsWith('http://')) rawCoverUrl = rawCoverUrl.replace('http://', 'https://');
-    if (rawCoverUrl.includes('books.google.com')) rawCoverUrl = rawCoverUrl.replace('&edge=curl', '');
-  }
-  const coverUrl = rawCoverUrl || `https://placehold.co/400x600/e2e8f0/1e293b?text=${encodeURIComponent(book.title.substring(0, 20))}`;
-
-  // Price Logic
   const price = book.sale_info?.listPrice?.amount 
     ? `$${book.sale_info.listPrice.amount} ${book.sale_info.listPrice.currencyCode}`
     : null;
+
+  // --- Smart Filtering Logic for Genres ---
+  let displaySubjects = book.subjects || [];
+  if (displaySubjects.length > 1) {
+    displaySubjects = displaySubjects.filter(s => 
+      !['Fiction', 'General', 'Juvenile Fiction', 'Young Adult Fiction', 'Literature', 'Books'].includes(s)
+    );
+  }
+  if (displaySubjects.length === 0 && book.subjects?.length > 0) {
+    displaySubjects = book.subjects;
+  }
 
   return (
     <main className="container mx-auto px-4 py-8 max-w-6xl min-h-screen">
@@ -110,61 +110,71 @@ export default async function BookDetailPage({
       <div className="grid md:grid-cols-12 gap-8 lg:gap-16">
         
         {/* --- LEFT COLUMN: Visuals & Actions (4/12) --- */}
-        <div className="md:col-span-4 lg:col-span-4 flex flex-col gap-6">
-          {/* Cover Image with Shadow */}
+        <div className="md:col-span-4 lg:col-span-4 flex flex-col gap-4">
+          {/* Cover Image */}
           <div className="relative aspect-[2/3] w-full rounded-lg overflow-hidden shadow-2xl bg-secondary/20 border border-border/50 group">
-            <Image
-              src={coverUrl}
-              alt={`Cover of ${book.title}`}
-              fill
-              className="object-cover transition-transform duration-700 group-hover:scale-105"
-              priority
-              sizes="(max-width: 768px) 100vw, 400px"
-            />
+            <BookCover url={rawCoverUrl} title={book.title} />
           </div>
 
-          {/* Primary Action */}
-          {book.sale_info?.buyLink ? (
-            <Button asChild className="w-full text-lg h-14 shadow-lg shadow-primary/20 font-bold tracking-wide" size="lg">
-              <a href={book.sale_info.buyLink} target="_blank" rel="noopener noreferrer">
-                <ShoppingCart className="mr-2 h-5 w-5" />
-                Buy eBook {price ? `• ${price}` : ''}
-              </a>
+          {/* Actions Grid */}
+          <div className="space-y-3">
+            {/* Buy Button */}
+            {book.sale_info?.buyLink ? (
+                <Button asChild className="w-full text-lg h-12 shadow-md font-bold tracking-wide" size="lg">
+                <a href={book.sale_info.buyLink} target="_blank" rel="noopener noreferrer">
+                    <ShoppingCart className="mr-2 h-5 w-5" />
+                    Buy eBook {price ? `• ${price}` : ''}
+                </a>
+                </Button>
+            ) : (
+                <Button disabled variant="secondary" className="w-full h-12">
+                    eBook Not Available
+                </Button>
+            )}
+
+            {/* Find in Library (WorldCat) */}
+            <Button variant="outline" asChild className="w-full h-12 border-primary/30 hover:bg-primary/5 text-foreground">
+                <a href={`https://www.worldcat.org/search?q=${book.isbn_13}`} target="_blank" rel="noopener noreferrer">
+                    <Library className="mr-2 h-5 w-5 text-primary" /> 
+                    Find in Library
+                </a>
             </Button>
-          ) : (
-             <Button disabled variant="secondary" className="w-full h-12">
-                eBook Not Available
-             </Button>
-          )}
-          
+
+            {/* Preview Link */}
+            <Button variant="ghost" size="sm" asChild className="w-full text-muted-foreground hover:text-foreground">
+                <a href={`https://books.google.com/books?isbn=${book.isbn_13}`} target="_blank" rel="noopener noreferrer">
+                     Preview on Google Books <ExternalLink className="ml-1.5 h-3 w-3" />
+                </a>
+            </Button>
+          </div>
+
            {/* ISBN Badge */}
-           <div className="flex justify-center">
-             <Badge variant="outline" className="font-mono text-xs text-muted-foreground font-normal">
+           <div className="flex justify-center pt-2">
+             <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground/70 font-normal border-dashed">
                 ISBN: {book.isbn_13}
              </Badge>
            </div>
         </div>
 
         {/* --- RIGHT COLUMN: Content (8/12) --- */}
-        <div className="md:col-span-8 lg:col-span-8 space-y-10">
+        <div className="md:col-span-8 lg:col-span-8 space-y-8">
           
-          {/* 1. Header Section */}
+          {/* Header */}
           <header className="space-y-4">
-            <div className="space-y-2">
+            <div className="space-y-1">
               <h1 className="text-4xl md:text-5xl font-bold font-headline text-balance leading-tight">
                 {book.title}
               </h1>
               {book.subtitle && (
-                <p className="text-2xl text-muted-foreground font-headline italic font-light text-balance">
+                <p className="text-2xl text-muted-foreground font-headline italic font-light text-balance leading-snug">
                   {book.subtitle}
                 </p>
               )}
             </div>
 
             <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
-               <span className="font-medium text-lg text-foreground">by {allAuthors}</span>
+               <span className="font-medium text-lg text-foreground">by <span className="text-primary">{allAuthors}</span></span>
                
-               {/* Rating Pill */}
                <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-yellow-500/10 text-yellow-600 dark:text-yellow-500 border border-yellow-500/20">
                  <Star className="h-3.5 w-3.5 fill-current" />
                  <span className="font-bold">{rating > 0 ? rating : 'N/A'}</span>
@@ -173,12 +183,83 @@ export default async function BookDetailPage({
             </div>
           </header>
 
-          <Separator />
+          {/* Metadata Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-y-6 gap-x-4 py-6 border-y border-border/60">
+             <div className="flex flex-col gap-1">
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                  <BookType className="h-3 w-3" /> Length
+                </span>
+                <span className="text-sm font-medium font-mono text-foreground">
+                  {book.page_count ? `${book.page_count} pages` : '-'}
+                </span>
+             </div>
+             <div className="flex flex-col gap-1">
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                  <Layers className="h-3 w-3" /> Publisher
+                </span>
+                <span className="text-sm font-medium truncate" title={book.publisher || ''}>
+                  {book.publisher || 'Unknown'}
+                </span>
+             </div>
+             <div className="flex flex-col gap-1">
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                  <Calendar className="h-3 w-3" /> Released
+                </span>
+                <span className="text-sm font-medium">
+                  {book.published_date || 'Unknown'}
+                </span>
+             </div>
+             {book.sale_info?.country && (
+               <div className="flex flex-col gap-1">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                    <Globe className="h-3 w-3" /> Region
+                  </span>
+                  <span className="text-sm font-medium">
+                    {book.sale_info.country}
+                  </span>
+               </div>
+             )}
+             {book.dimensions && (
+                <div className="flex flex-col gap-1 sm:col-span-2">
+                   <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                     <Ruler className="h-3 w-3" /> Dimensions
+                   </span>
+                   <span className="text-sm font-medium text-muted-foreground">
+                     {book.dimensions.height || '?'} x {book.dimensions.width || '?'} x {book.dimensions.thickness || '?'}
+                   </span>
+                </div>
+             )}
+          </div>
 
-          {/* 2. Description Section */}
-          <section className="space-y-4">
-            <h3 className="text-lg font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-              <BookOpen className="h-4 w-4" /> Synopsis
+          {/* Genres */}
+          {displaySubjects.length > 0 && (
+            <section className="space-y-3">
+              <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                <Sparkles className="h-3.5 w-3.5" /> Genres & Themes
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                {displaySubjects.map(subject => (
+                  <Link 
+                    key={subject} 
+                    href={`/search?q=&subject=${encodeURIComponent(subject)}`}
+                    className="no-underline group"
+                  >
+                    <Badge 
+                      variant="secondary" 
+                      className="px-3 py-1 text-sm font-normal bg-secondary/50 hover:bg-primary/10 hover:text-primary hover:border-primary/30 transition-all duration-200 border border-transparent cursor-pointer"
+                    >
+                      {subject}
+                    </Badge>
+                  </Link>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Description */}
+          <section className="space-y-3">
+            <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+              <BookOpen className="h-3.5 w-3.5" /> Synopsis
             </h3>
             {book.description ? (
                <ExpandableText text={book.description} />
@@ -187,65 +268,23 @@ export default async function BookDetailPage({
             )}
           </section>
 
-          {/* 3. Metadata Bar (Publisher, Date, Pages) */}
-          <div className="grid grid-cols-3 gap-4 p-5 bg-secondary/30 rounded-xl border border-border/50 backdrop-blur-sm">
-            <div className="flex flex-col gap-1">
-               <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                 <Layers className="h-3 w-3" /> Publisher
-               </span>
-               <span className="text-sm font-semibold truncate" title={book.publisher || ''}>
-                 {book.publisher || 'Unknown'}
-               </span>
-            </div>
-            <div className="flex flex-col gap-1 border-l border-border/50 pl-4">
-               <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                 <Calendar className="h-3 w-3" /> Released
-               </span>
-               <span className="text-sm font-semibold">
-                 {book.published_date || 'Unknown'}
-               </span>
-            </div>
-            <div className="flex flex-col gap-1 border-l border-border/50 pl-4">
-               <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                 <Hash className="h-3 w-3" /> Length
-               </span>
-               <span className="text-sm font-semibold">
-                 {book.page_count ? `${book.page_count} Pages` : '-'}
-               </span>
-            </div>
-          </div>
-
-          {/* 4. Genres & Themes Cloud */}
-          {book.subjects && book.subjects.length > 0 && (
-            <section className="space-y-4">
-              <h3 className="text-lg font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                <Hash className="h-4 w-4" /> Genres & Themes
-              </h3>
-              <div className="flex flex-wrap gap-2.5">
-                {book.subjects.map(subject => (
-                  <Badge 
-                    key={subject} 
-                    variant="secondary" 
-                    className="px-3 py-1.5 text-sm font-normal hover:bg-primary hover:text-primary-foreground transition-colors cursor-default border border-border/60"
-                  >
-                    {subject}
-                  </Badge>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* 5. Author Bio (New Feature) */}
+          {/* Author Bio */}
           {authorBio && (
-            <section className="space-y-4 pt-4">
-               <div className="flex items-center gap-3 mb-2">
-                 <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-                    <User className="h-4 w-4" />
+            <section className="mt-8 pt-8 border-t border-border/40">
+               <div className="bg-card/50 rounded-xl border border-border/60 p-6 flex flex-col md:flex-row gap-6">
+                 <div className="flex-shrink-0">
+                    <div className="h-16 w-16 rounded-full bg-gradient-to-br from-primary/20 to-secondary flex items-center justify-center text-primary font-headline text-2xl font-bold border-2 border-background shadow-sm">
+                       {authorName.charAt(0)}
+                    </div>
                  </div>
-                 <h3 className="text-xl font-bold font-headline">About {authorName}</h3>
-               </div>
-               <div className="bg-card p-6 rounded-xl border shadow-sm text-sm leading-relaxed text-muted-foreground">
-                 <ExpandableText text={authorBio} limit={250} />
+                 <div className="space-y-2 flex-grow">
+                    <div className="flex items-center justify-between">
+                       <h3 className="text-xl font-bold font-headline">About {authorName}</h3>
+                    </div>
+                    <div className="text-sm text-muted-foreground leading-relaxed prose dark:prose-invert max-w-none">
+                       <ExpandableText text={authorBio} limit={250} />
+                    </div>
+                 </div>
                </div>
             </section>
           )}
@@ -253,7 +292,7 @@ export default async function BookDetailPage({
         </div>
       </div>
 
-      {/* --- Footer Section: More Books --- */}
+      {/* Footer */}
       <MoreByAuthor authorName={authorName} currentIsbn={book.isbn_13} />
 
     </main>

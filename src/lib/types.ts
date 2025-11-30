@@ -3,7 +3,7 @@
 export interface AuthorItem {
   name: string;
   key?: string | null;
-  bio?: string | null; // NEW: Added for v1.8 Author Bio feature
+  bio?: string | null;
 }
 
 export interface GoogleCoverLinks {
@@ -49,6 +49,11 @@ export interface AccessInfo {
   epub?: { isAvailable: boolean; acsTokenLink?: string };
 }
 
+export interface SeriesInfo {
+  name: string;
+  order?: number;
+}
+
 export interface MergedBook {
   title: string;
   subtitle?: string;
@@ -72,6 +77,12 @@ export interface MergedBook {
   open_library_id?: string;
   subjects: string[];
   open_library_cover_links?: OpenLibraryCoverLinks;
+  
+  // v2.0 New Fields
+  series?: SeriesInfo;
+  format_tag?: string;
+  related_isbns?: string[];
+  content_flag?: string;
 }
 
 export interface SearchResultItem {
@@ -81,12 +92,17 @@ export interface SearchResultItem {
   isbn_13?: string;
   isbn_10?: string;
   publisher?: string;
+  published_date?: string; // Fixed: Added this
   average_rating?: number;
   ratings_count?: number;
   categories?: string[];
   google_book_id?: string;
   open_library_work_id?: string;
   cover_url?: string;
+  
+  // v2.0 New Fields
+  series?: SeriesInfo;
+  format_tag?: string; // Fixed: Added this
 }
 
 export interface HybridSearchResponse {

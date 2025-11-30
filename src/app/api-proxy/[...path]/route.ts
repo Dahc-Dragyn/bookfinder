@@ -9,35 +9,37 @@ export async function GET(req: Request) {
   }
 
   try {
-    // 1. Force HTTPS (Google often redirects HTTP -> HTTPS anyway, but let's be explicit)
+    // 1. Force HTTPS
     let targetUrl = img.replace("http://", "https://");
     
-    // 2. Google Books Specific: Remove the "curled page" effect for a cleaner image
+    // 2. Google Books Specific Cleanup
     if (targetUrl.includes('books.google.com')) {
        targetUrl = targetUrl.replace('&edge=curl', '');
     }
 
-    // 3. Fetch the image from the external source
-    // We use 'fetch' here so the SERVER talks to Google (Server-to-Server is secure)
-    const response = await fetch(targetUrl);
+    // 3. Fetch with User-Agent to avoid 403 Forbidden from Google
+    const response = await fetch(targetUrl, {
+        headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        }
+    });
     
     if (!response.ok) {
         return new NextResponse("Failed to fetch image", { status: response.status });
     }
 
-    // 4. Get the content type (e.g., image/jpeg)
+    // 4. Pass Content-Type
     const contentType = response.headers.get("content-type") || "image/jpeg";
     
-    // 5. Get the image data as a buffer
+    // 5. Get Buffer
     const buffer = await response.arrayBuffer();
 
-    // 6. Return the image directly to the browser
+    // 6. Return with aggressive caching
     return new NextResponse(buffer, {
       status: 200,
       headers: {
         "Content-Type": contentType,
-        // Cache it aggressively (1 day) so we don't hammer Google's servers
-        "Cache-Control": "public, max-age=86400, stale-while-revalidate=3600",
+        "Cache-Control": "public, max-age=31536000, immutable",
       }
     });
 

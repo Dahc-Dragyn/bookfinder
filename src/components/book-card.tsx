@@ -1,7 +1,9 @@
+'use client';
+
 import Link from 'next/link';
-import Image from 'next/image';
 import { Card, CardContent } from '@/components/ui/card';
-import { Book } from 'lucide-react'; // Removed ImageOff
+import { Book } from 'lucide-react'; 
+import { cn } from '@/lib/utils';
 import type { SearchResultItem } from '@/lib/types';
 
 interface BookCardProps {
@@ -10,11 +12,16 @@ interface BookCardProps {
 
 export default function BookCard({ book }: BookCardProps) {
   const cleanTitle = book.title.replace(/<[^>]*>?/gm, '').substring(0, 50);
-  const placeholderSrc = `https://placehold.co/400x600/e2e8f0/1e293b?text=${encodeURIComponent(cleanTitle || 'No Title')}`;
-  const coverSrc = book.cover_url || placeholderSrc;
-  const hasLink = !!book.isbn_13;
+  
+  let coverSrc = book.cover_url;
+  const isGoogle = coverSrc?.includes('books.google.com') ?? false;
 
-  // --- FIX: Handle Author Objects ---
+  // LOGIC: Only proxy Google Books to fix HTTP/CORS issues.
+  if (isGoogle && coverSrc) {
+      coverSrc = `/api-proxy/image?url=${encodeURIComponent(coverSrc)}`;
+  }
+
+  const hasLink = !!book.isbn_13;
   const authorNames = book.authors?.map(a => a.name).join(', ') || 'Unknown Author';
 
   return (
@@ -23,33 +30,56 @@ export default function BookCard({ book }: BookCardProps) {
       className={`group ${!hasLink ? 'pointer-events-none cursor-default opacity-60' : ''}`}
       aria-disabled={!hasLink}
     >
-      <Card className="overflow-hidden h-full transition-all duration-300 hover:shadow-lg hover:border-primary/50 flex flex-col">
+      <Card className="overflow-hidden h-full transition-all duration-300 hover:shadow-lg hover:border-primary/50 flex flex-col border-border/40 bg-card/50 backdrop-blur-sm">
         <CardContent className="p-0 flex-grow flex flex-col">
           <div className="aspect-[2/3] w-full relative bg-secondary/30 flex items-center justify-center overflow-hidden">
-            {book.cover_url ? (
-              <Image
+            
+            {/* Image Layer */}
+            {coverSrc && (
+              <img
                 src={coverSrc}
                 alt={`Cover of ${cleanTitle}`}
-                fill
-                sizes="(max-width: 768px) 50vw, (max-width: 1200px) 33vw, 20vw"
-                className="object-cover transition-transform duration-300 group-hover:scale-105"
-                unoptimized={true} 
+                loading="lazy"
+                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 relative z-10"
+                onError={(e) => {
+                    // Hide the broken image tag so the background placeholder shows
+                    e.currentTarget.style.display = 'none';
+                    // Find the placeholder sibling and show it
+                    const parent = e.currentTarget.parentElement;
+                    const placeholder = parent?.querySelector('.placeholder-fallback');
+                    if (placeholder) {
+                        placeholder.classList.remove('hidden');
+                    }
+                }}
               />
-            ) : (
-              <div className="text-muted-foreground flex flex-col items-center text-center p-4">
+            )}
+
+            {/* Fallback Placeholder Layer (Shows if no image or if image errors out) */}
+            <div className={cn(
+                "placeholder-fallback absolute inset-0 flex flex-col items-center justify-center text-center p-4 bg-secondary/30",
+                coverSrc ? "hidden" : "" // Hide initially if we have a URL to try
+            )}>
                 <Book className="h-12 w-12 mb-2 opacity-20" />
                 <span className="text-xs font-semibold opacity-40">{cleanTitle}</span>
-              </div>
-            )}
+            </div>
+            
+            {/* Format Tag Overlay */}
+             {book.format_tag && (
+                <div className="absolute top-2 right-2 z-20 bg-black/60 text-white text-[10px] px-2 py-0.5 rounded backdrop-blur-md uppercase tracking-wider font-bold shadow-sm">
+                  {book.format_tag}
+                </div>
+             )}
           </div>
           
-          <div className="p-3">
-            <p className="font-bold font-headline truncate text-sm md:text-base" title={book.title}>
-              {cleanTitle}
-            </p>
-            <p className="text-xs text-muted-foreground truncate" title={authorNames}>
-              {authorNames}
-            </p>
+          <div className="p-3 flex flex-col justify-between flex-grow">
+            <div>
+              <p className="font-bold font-headline truncate text-sm md:text-base text-foreground" title={book.title}>
+                {cleanTitle}
+              </p>
+              <p className="text-xs text-muted-foreground truncate mt-0.5" title={authorNames}>
+                {authorNames}
+              </p>
+            </div>
           </div>
         </CardContent>
       </Card>

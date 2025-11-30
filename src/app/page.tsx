@@ -1,80 +1,71 @@
-import { Suspense } from 'react';
-import { getAllNewReleases, getFictionGenres } from '@/lib/actions';
-import BookCard from '@/components/book-card';
-import { Skeleton } from '@/components/ui/skeleton';
 import SearchTabs from '@/components/search-tabs';
 import Logo from '@/components/logo';
-import GenreChips from '@/components/genre-chips';
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
+import { Info } from 'lucide-react';
 
-// Async wrapper for the grid to handle the subject prop
-async function BookGrid({ subject }: { subject?: string }) {
-  const newReleases = await getAllNewReleases(subject);
-
+export default function Home() {
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4 md:gap-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      {newReleases.map((book, i) => (
-        <BookCard key={book.isbn_13 || `home-book-${i}`} book={book} />
-      ))}
-    </div>
-  );
-}
+    <main className="container mx-auto px-4 min-h-screen flex flex-col items-center justify-center -mt-16">
+      <div className="w-full max-w-3xl space-y-12 animate-in fade-in zoom-in duration-700">
+        
+        {/* Header / Manifesto */}
+        <header className="text-center space-y-6">
+          <div className="inline-block transform hover:scale-105 transition-transform duration-300">
+            <Logo className="text-5xl md:text-6xl mb-2" />
+          </div>
+          
+          <blockquote className="text-xl md:text-2xl font-medium text-foreground/80 max-w-2xl mx-auto text-balance leading-relaxed font-headline italic">
+            &ldquo;Tired of being &apos;personalized&apos;? We&apos;re just a search engine. The smarter you are, the better it works.&rdquo;
+          </blockquote>
+        </header>
 
-function GridSkeleton() {
-  return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4 md:gap-6">
-      {Array.from({ length: 12 }).map((_, i) => (
-        <div key={i} className="space-y-2">
-          <Skeleton className="aspect-[2/3] w-full rounded-md" />
-          <Skeleton className="h-4 w-3/4" />
-          <Skeleton className="h-3 w-1/2" />
-        </div>
-      ))}
-    </div>
-  );
-}
+        {/* The Tool */}
+        <section className="w-full space-y-4">
+            <div className="bg-card/50 p-6 rounded-xl border border-border/40 shadow-sm backdrop-blur-sm">
+                <SearchTabs />
+            </div>
 
-export default async function Home({
-  searchParams,
-}: {
-  searchParams: Promise<{ subject?: string }>;
-}) {
-  const resolvedParams = await searchParams;
-  const subject = resolvedParams.subject || 'Fiction';
-  
-  // Fetch genres on the server
-  const genres = await getFictionGenres();
+            {/* Search Syntax Cheat Sheet */}
+            <div className="max-w-lg mx-auto">
+                 <Accordion type="single" collapsible className="w-full">
+                    <AccordionItem value="tips" className="border-none">
+                        <AccordionTrigger className="justify-center text-xs text-muted-foreground hover:text-primary py-2 hover:no-underline gap-2">
+                            <Info className="h-3 w-3" />
+                            <span>Power User Search Tips</span>
+                        </AccordionTrigger>
+                        <AccordionContent>
+                            <div className="bg-muted/30 p-4 rounded-lg text-sm space-y-2 text-muted-foreground border border-border/50 text-left">
+                                <div className="grid grid-cols-[80px_1fr] gap-2">
+                                    <span className="font-mono text-primary text-xs bg-primary/10 px-1 rounded w-fit h-fit">inauthor:</span>
+                                    <span>Find books by author (e.g. <em>inauthor:&quot;Frank Herbert&quot;</em>)</span>
 
-  return (
-    <main className="container mx-auto px-4 py-8 md:py-12 min-h-screen flex flex-col">
-      <header className="text-center mb-10 space-y-4">
-        <div className="inline-block transform hover:scale-105 transition-transform duration-300">
-          <Logo />
-        </div>
-        <p className="text-lg text-muted-foreground max-w-2xl mx-auto text-balance">
-          "Tired of being 'personalized'? We're just a search engine. The smarter you are, the better it works."
-        </p>
-      </header>
+                                    <span className="font-mono text-primary text-xs bg-primary/10 px-1 rounded w-fit h-fit">intitle:</span>
+                                    <span>Find books with title words (e.g. <em>intitle:Dune</em>)</span>
 
-      {/* Search Section */}
-      <section className="max-w-2xl mx-auto w-full mb-12">
-        <SearchTabs />
-      </section>
+                                    <span className="font-mono text-primary text-xs bg-primary/10 px-1 rounded w-fit h-fit">subject:</span>
+                                    <span>Search categories (e.g. <em>subject:history</em>)</span>
+                                    
+                                    <span className="font-mono text-primary text-xs bg-primary/10 px-1 rounded w-fit h-fit">isbn:</span>
+                                    <span>Direct lookup (e.g. <em>isbn:9780441172719</em>)</span>
+                                </div>
+                            </div>
+                        </AccordionContent>
+                    </AccordionItem>
+                </Accordion>
+            </div>
+        </section>
 
-      {/* Discovery Section */}
-      <section className="space-y-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-4">
-          <h2 className="text-3xl font-headline font-bold">
-            New in <span className="text-primary">{subject}</span>
-          </h2>
-        </div>
+        {/* Footer / Trust Signals */}
+        <footer className="text-center text-sm text-muted-foreground/60">
+          <p>Powered by Google Books & Open Library • 100% Algorithm Free</p>
+        </footer>
 
-        {/* Genre Filter Bar */}
-        <GenreChips genres={genres} />
-
-        <Suspense key={subject} fallback={<GridSkeleton />}>
-          <BookGrid subject={subject} />
-        </Suspense>
-      </section>
+      </div>
     </main>
   );
 }
