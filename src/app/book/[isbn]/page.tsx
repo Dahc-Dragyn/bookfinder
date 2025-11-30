@@ -19,6 +19,7 @@ import {
 import BookCard from '@/components/book-card';
 import ExpandableText from '@/components/expandable-text';
 import BookCover from '@/components/book-cover';
+import Recommendations from '@/components/ai/recommendations';
 
 // --- Helper Component: More By Author ---
 async function MoreByAuthor({ authorName, currentIsbn }: { authorName: string; currentIsbn: string }) {
@@ -80,16 +81,17 @@ export default async function BookDetailPage({
   const ratingCount = book.ratings_count || 0;
 
   // --- IMAGE LOGIC (High-Res Priority Restoration) ---
-  // 1. Google Extra Large / Large: Best Quality (Risk: Ghost image, handled by BookCover)
-  // 2. Open Library Large: High Quality backup
-  // 3. Google Medium / Open Library Medium
-  // 4. Google Thumbnail: Safe fallback
+  // CORRECTED LOGIC: Prioritize the best *available* links from the API response.
+  // 1. Open Library Large: Most reliable high-res source.
+  // 2. Google Extra Large / Large: Best quality, but often missing.
+  // 3. Open Library Medium / Google Medium: Good fallbacks.
+  // 4. Google Thumbnail: Safest fallback.
   const coverUrls = [
-    book.google_cover_links?.extraLarge,        // #1 Try Google High Res First
-    book.google_cover_links?.large,             // #2 Try Google High Res
-    book.open_library_cover_links?.large,       // #3 Try OL High Res
-    book.google_cover_links?.medium,            // #4 Try Google Medium
-    book.open_library_cover_links?.medium,      // #5 Try OL Medium
+    book.open_library_cover_links?.large,       // #1 High-Res Reliable
+    book.google_cover_links?.extraLarge,        // #2 Best Quality (if present)
+    book.google_cover_links?.large,             // #3 Great Quality (if present)
+    book.open_library_cover_links?.medium,      // #4 Good Fallback
+    book.google_cover_links?.medium,            // #5 Good Fallback
     book.google_cover_links?.thumbnail,         // #6 Safe Fallback
     book.google_cover_links?.smallThumbnail,
     book.open_library_cover_links?.small,
@@ -296,6 +298,13 @@ export default async function BookDetailPage({
           )}
         </div>
       </div>
+
+       <section className="mt-16 pt-8 border-t border-border/40 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-500">
+        <h3 className="text-2xl font-headline font-bold mb-6 flex items-center gap-2">
+          <Sparkles className="text-accent" /> AI Recommendations
+        </h3>
+        <Recommendations title={book.title} author={authorName} />
+      </section>
 
       <MoreByAuthor authorName={authorName} currentIsbn={book.isbn_13} />
     </main>
