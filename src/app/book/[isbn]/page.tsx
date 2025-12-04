@@ -79,24 +79,60 @@ export default async function BookDetailPage({
   const rating = book.average_rating || 0;
   const ratingCount = book.ratings_count || 0;
 
-  // --- IMAGE LOGIC: HIGH RESOLUTION PRIORITY ---
-  // We prioritize Google High Res images because for modern books (like Megan Bledsoe's),
-  // these are the best quality.
-  // The "BookCover" component handles failures (404s) and "ghost" images (via proxy filter).
-  const coverUrls = [
-    book.google_cover_links?.extraLarge,       // #1 Best Quality
-    book.google_cover_links?.large,            // #2 High Quality
-    book.open_library_cover_links?.large,      // #3 OL High Quality
-    book.google_cover_links?.medium,           // #4 Medium Quality
-    book.open_library_cover_links?.medium,     // #5 OL Medium
-    book.google_cover_links?.thumbnail,        // #6 Safe Fallback (Zoom 1)
-    book.google_cover_links?.smallThumbnail,   
-    book.open_library_cover_links?.small       // #8 Last Resort
-  ].filter(url => url !== null && url !== undefined && url !== '');
+  // --- INTELLIGENT COVER LOGIC (Frontend Edition) ---
+  // 1. Default to "Modern" (Optimistic) unless proven otherwise.
+  let isModern = true; 
+  
+  if (book.published_date && book.published_date.length >= 4) {
+      const year = parseInt(book.published_date.substring(0, 4));
+      // Only downgrade to "Classic" if we are sure it is old (Pre-2005)
+      if (!isNaN(year) && year < 2005) {
+          isModern = false;
+      }
+  }
 
-  // Debug logs (server-side)
-  console.log('[BookDetail] Raw Google Links:', book.google_cover_links);
-  console.log(`[BookDetail] Final cover URLs (${coverUrls.length}):`, coverUrls);
+  // 2. Get Base URLs with Type Predicate
+  const rawUrls: string[] = [
+    book.google_cover_links?.extraLarge,
+    book.google_cover_links?.large,
+    book.open_library_cover_links?.large,   
+    book.open_library_cover_links?.medium,  
+    book.google_cover_links?.medium,
+    book.google_cover_links?.thumbnail,
+    book.google_cover_links?.smallThumbnail,
+    book.open_library_cover_links?.small
+  ].filter((url): url is string => url !== null && url !== undefined && url !== '');
+
+  // 3. Apply Logic
+  let finalUrls: string[] = [];
+  
+  if (isModern) {
+     // MODERN: Force Optimism. 
+     const googleThumb = rawUrls.find(u => u?.includes('books.google.com'));
+     if (googleThumb) {
+        // Create Safe High-Res URL (with 15KB guard)
+        const highRes = googleThumb
+            .replace(/zoom=[0-9]/, 'zoom=0')
+            .replace('&edge=curl', '') 
+            + '&minSize=15000'; 
+        
+        finalUrls.push(highRes);
+     }
+
+     // CRITICAL FIX: Filter out "unsafe" zoom=0 links from the raw list.
+     // We only want the one we just created with the minSize guard.
+     // If that fails, we want to fall back to Open Library or Thumbnails (zoom=1+),
+     // NOT to the unguarded zoom=0 links that return placeholders.
+     const safeFallbacks = rawUrls.filter(u => !u?.includes('zoom=0'));
+     finalUrls = [...finalUrls, ...safeFallbacks];
+
+  } else {
+     // CLASSIC: Safety First.
+     // Explicitly filter out zoom=0.
+     finalUrls = rawUrls.filter(u => !u?.includes('zoom=0'));
+  }
+
+  console.log(`[BookDetail] Date: ${book.published_date}. Is Modern? ${isModern}. Final URLs:`, finalUrls);
 
   const price = book.sale_info?.listPrice?.amount 
     ? `$${book.sale_info.listPrice.amount} ${book.sale_info.listPrice.currencyCode}`
@@ -131,7 +167,7 @@ export default async function BookDetailPage({
         <div className="md:col-span-4 lg:col-span-4 flex flex-col gap-4">
           {/* Cover Image */}
           <div className="relative aspect-[2/3] w-full rounded-lg overflow-hidden shadow-2xl bg-secondary/20 border border-border/50 group">
-            <BookCover urls={coverUrls} title={book.title} />
+            <BookCover urls={finalUrls} title={book.title} />
           </div>
 
           {/* Actions Grid */}

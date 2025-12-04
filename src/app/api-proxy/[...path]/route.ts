@@ -1,22 +1,18 @@
 import { NextResponse } from "next/server";
 
-// FIX: Lowered the minimum size threshold. The previous value (12KB) was too high
-// and was incorrectly blocking valid, but well-optimized, cover images.
-// A 3KB threshold is safer, catching tiny error pixels without blocking real covers.
-const MIN_SIZE_BYTES = 3000;
-
-// Patterns to identify known placeholder images from Google, which should always be blocked.
+// Patterns to identify known placeholder images from Google.
 const GOOGLE_PLACEHOLDER_PATTERNS = [
-  "&img=1&",
-  "&img=1",        
-  "img=1&",
-  "img=1",
   "no_cover_thumb.gif",
 ];
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const rawUrl = searchParams.get("url");
+  
+  // Allow the frontend to specify a minimum size limit.
+  // Default to 2000 bytes (2KB) if not specified to block 1x1 pixels.
+  const minSizeParam = searchParams.get("minSize");
+  const minSizeBytes = minSizeParam ? parseInt(minSizeParam) : 2000;
 
   if (!rawUrl) {
     return new NextResponse("Missing image URL", { status: 400 });
@@ -58,9 +54,9 @@ export async function GET(req: Request) {
 
     const buffer = Buffer.from(await response.arrayBuffer());
 
-    // Block images that are too small (likely placeholders or error pixels).
-    if (buffer.byteLength < MIN_SIZE_BYTES) {
-      console.warn(`[Proxy] Image too small (${buffer.byteLength}b < ${MIN_SIZE_BYTES}b) for: ${targetUrl}`);
+    // Dynamic Size Filter
+    if (buffer.byteLength < minSizeBytes) {
+      console.warn(`[Proxy] Image too small (${buffer.byteLength}b < ${minSizeBytes}b) for: ${targetUrl}`);
       return new NextResponse(null, { status: 404 });
     }
 
