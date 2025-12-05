@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { Card, CardContent } from '@/components/ui/card';
-import { Book } from 'lucide-react'; 
+import { Book, Sparkles, Layers } from 'lucide-react'; 
 import { cn } from '@/lib/utils';
 import type { SearchResultItem } from '@/lib/types';
 
@@ -23,6 +23,23 @@ export default function BookCard({ book }: BookCardProps) {
 
   const hasLink = !!book.isbn_13;
   const authorNames = book.authors?.map(a => a.name).join(', ') || 'Unknown Author';
+
+  // --- FRESHNESS SIGNALS (Layer 3) ---
+  
+  // 1. "Just In" Logic (Last 45 Days)
+  const isJustIn = (() => {
+    if (!book.published_date) return false;
+    const pubDate = new Date(book.published_date);
+    if (isNaN(pubDate.getTime())) return false;
+    
+    const now = new Date();
+    const diffTime = Math.abs(now.getTime() - pubDate.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+    return diffDays <= 45;
+  })();
+
+  // 2. "Series Premiere" Logic
+  const isPremiere = book.series?.order === 1;
 
   return (
     <Link 
@@ -54,21 +71,45 @@ export default function BookCard({ book }: BookCardProps) {
               />
             )}
 
-            {/* Fallback Placeholder Layer (Shows if no image or if image errors out) */}
+            {/* Fallback Placeholder Layer */}
             <div className={cn(
                 "placeholder-fallback absolute inset-0 flex flex-col items-center justify-center text-center p-4 bg-secondary/30",
-                coverSrc ? "hidden" : "" // Hide initially if we have a URL to try
+                coverSrc ? "hidden" : "" 
             )}>
                 <Book className="h-12 w-12 mb-2 opacity-20" />
                 <span className="text-xs font-semibold opacity-40">{cleanTitle}</span>
             </div>
             
-            {/* Format Tag Overlay */}
-             {book.format_tag && (
-                <div className="absolute top-2 right-2 z-20 bg-black/60 text-white text-[10px] px-2 py-0.5 rounded backdrop-blur-md uppercase tracking-wider font-bold shadow-sm">
-                  {book.format_tag}
+            {/* --- BADGES LAYER --- */}
+            <div className="absolute inset-0 z-20 pointer-events-none p-2 flex flex-col justify-between">
+                
+                {/* Top Row: Just In (Left) & Format (Right) */}
+                <div className="flex justify-between items-start gap-2">
+                    {isJustIn ? (
+                        <div className="bg-emerald-500/90 text-white text-[10px] px-2 py-0.5 rounded shadow-sm font-bold uppercase tracking-wider flex items-center gap-1 backdrop-blur-md animate-in fade-in zoom-in duration-300">
+                            <Sparkles className="h-2.5 w-2.5 fill-current" />
+                            <span>New</span>
+                        </div>
+                    ) : <div></div> /* Spacer */}
+
+                    {book.format_tag && (
+                        <div className="bg-black/60 text-white text-[10px] px-2 py-0.5 rounded backdrop-blur-md uppercase tracking-wider font-bold shadow-sm">
+                            {book.format_tag}
+                        </div>
+                    )}
                 </div>
-             )}
+
+                {/* Bottom Row: Series Premiere (Left) */}
+                <div className="flex justify-start">
+                    {isPremiere && (
+                        <div className="bg-primary/90 text-white text-[10px] px-2 py-0.5 rounded shadow-sm font-bold uppercase tracking-wider flex items-center gap-1 backdrop-blur-md">
+                            <Layers className="h-2.5 w-2.5" />
+                            <span>Series #1</span>
+                        </div>
+                    )}
+                </div>
+            </div>
+
           </div>
           
           <div className="p-3 flex flex-col justify-between flex-grow">

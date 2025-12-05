@@ -6,6 +6,20 @@ import { notFound } from 'next/navigation';
 // --- CONFIGURATION ---
 const API_BASE = (process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://127.0.0.1:8000') + '/books';
 
+// --- DATA HYGIENE: The Blacklist ---
+// Immediate ban for books that persistently spoof "New Release" filters due to bad metadata.
+const TITLE_BLACKLIST = [
+  'cloud mountain',
+  'the great gatsby',
+  '1984',
+  'animal farm',
+  'pride and prejudice',
+  'the hobbit',
+  'little women',
+  'me before you', // Added based on recent feedback
+  'the dead zone'
+];
+
 // --- HELPER: The Quality Gate ---
 function isValidBook(book: SearchResultItem): boolean {
   // 1. Must have an ISBN
@@ -21,57 +35,72 @@ function isValidBook(book: SearchResultItem): boolean {
   
   // 4. Specific Noise Filters
   const lowerTitle = book.title.toLowerCase();
+  const lowerSubtitle = (book.subtitle || '').toLowerCase();
+  
   if (lowerTitle === 'history' || lowerTitle.includes('report') || lowerTitle.includes('document')) return false;
+
+  // 5. MANUAL BLACKLIST (The "Cloud Mountain" Fix)
+  if (TITLE_BLACKLIST.some(banned => lowerTitle.includes(banned))) {
+      return false;
+  }
+
+  // 6. Reprint Detection (Metadata Forensics)
+  if (
+      lowerTitle.includes('anniversary edition') || 
+      lowerSubtitle.includes('anniversary edition') ||
+      lowerTitle.includes('classic') ||
+      lowerTitle.includes('reissue') ||
+      lowerTitle.includes('reprint')
+  ) {
+      return false;
+  }
+
+  // 7. Deep Date Check
+  const item = book as any; 
+  const potentialYears = [
+      item.original_publication_year,
+      item.first_publish_year,
+      item.first_published_year 
+  ].map(val => parseInt(String(val), 10)).filter(y => !isNaN(y));
+
+  if (potentialYears.some(year => year < 2023)) {
+      return false;
+  }
 
   return true;
 }
 
 // --- HELPER: Date Recency Filter ---
-// We strictly filter for books published in the current year or the previous year.
 function isRecentBook(book: SearchResultItem): boolean {
   if (!book.published_date) return false;
-
-  // Handle various date formats (YYYY, YYYY-MM, YYYY-MM-DD)
   const pubYear = parseInt(book.published_date.substring(0, 4), 10);
-  
-  // If parsing failed, assume it's old/invalid
   if (isNaN(pubYear)) return false;
-
   const currentYear = new Date().getFullYear();
-  // Strict: Only this year and last year
   return pubYear >= (currentYear - 1);
 }
 
-// --- HELPER: Popularity Sorting ---
-// Prioritizes books that have buzz (ratings) over just being "new"
-function sortPopularity(a: SearchResultItem, b: SearchResultItem): number {
-  const ratingsA = a.ratings_count || 0;
-  const ratingsB = b.ratings_count || 0;
-  
-  // 1. Primary Sort: Social Proof (Number of Ratings)
-  if (ratingsA > ratingsB) return -1;
-  if (ratingsA < ratingsB) return 1;
-  
-  // 2. Secondary Sort: Quality (Average Rating)
-  const avgA = a.average_rating || 0;
-  const avgB = b.average_rating || 0;
-  if (avgA > avgB) return -1;
-  if (avgA < avgB) return 1;
+// --- HELPER: Sorts ---
+function sortRecency(a: SearchResultItem, b: SearchResultItem): number {
+  const dateA = new Date(a.published_date || 0).getTime();
+  const dateB = new Date(b.published_date || 0).getTime();
+  return dateB - dateA;
+}
 
+function sortQualityBooks(a: SearchResultItem, b: SearchResultItem): number {
+  if (a.cover_url && !b.cover_url) return -1;
+  if (!a.cover_url && b.cover_url) return 1;
+  if ((a.average_rating || 0) > (b.average_rating || 0)) return -1;
+  if ((a.average_rating || 0) < (b.average_rating || 0)) return 1;
   return 0;
 }
 
-// --- HELPER: Quality Sorting (For Search Results) ---
-function sortQualityBooks(a: SearchResultItem, b: SearchResultItem): number {
-  // Prioritize books with covers
-  if (a.cover_url && !b.cover_url) return -1;
-  if (!a.cover_url && b.cover_url) return 1;
-  
-  // Secondary sort: Rating
-  if ((a.average_rating || 0) > (b.average_rating || 0)) return -1;
-  if ((a.average_rating || 0) < (b.average_rating || 0)) return 1;
-  
-  return 0;
+function shuffleArray<T>(array: T[]): T[] {
+  const newArr = [...array];
+  for (let i = newArr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [newArr[i], newArr[j]] = [newArr[j], newArr[i]];
+  }
+  return newArr;
 }
 
 async function fetcher(url: string): Promise<any> {
@@ -79,12 +108,10 @@ async function fetcher(url: string): Promise<any> {
     cache: 'no-store', 
     headers: { 'ngrok-skip-browser-warning': 'true' }
   });
-
   if (!response.ok) {
     if (response.status === 404) return null;
     throw new Error(`[API Error] ${response.status} ${response.statusText} fetching ${url}`);
   }
-  
   return response.json();
 }
 
@@ -92,73 +119,82 @@ async function fetcher(url: string): Promise<any> {
 // ACTIONS
 // ---------------------------------------------
 
-// Used for the dedicated "New Releases" page
-// FIXED: Removed "Genre Roulette". Now defaults to "Fiction" for consistency.
-export async function getNewReleases(startIndex: number = 0): Promise<{ books: SearchResultItem[], genre: string }> {
-  const genre = 'Fiction'; 
+export async function getNewReleases(subject: string = 'Fiction', startIndex: number = 0): Promise<{ books: SearchResultItem[], genre: string }> {
   const limit = 40; 
-  
   const data: HybridSearchResponse = await fetcher(
-    `${API_BASE}/new-releases?subject=${encodeURIComponent(genre)}&limit=${limit}&startIndex=${startIndex}`
+    `${API_BASE}/new-releases?subject=${encodeURIComponent(subject)}&limit=${limit}&startIndex=${startIndex}`
   );
   
-  const rawResults = data?.results || [];
-  
-  const books = rawResults
-    .filter(book => isValidBook(book) && isRecentBook(book))
-    .filter(book => book.cover_url) 
-    .sort(sortPopularity) 
-    .slice(0, 15);
+  let books = (data?.results || [])
+    .filter(book => isValidBook(book) && isRecentBook(book)) // Aggressive filters
+    .filter(book => book.cover_url);
 
-  return { books, genre };
+  books.sort(sortRecency);
+
+  const topTier = books.slice(0, 30);
+  const shuffledTop = shuffleArray(topTier);
+  
+  return { books: shuffledTop.slice(0, 15), genre: subject };
 }
 
-// Used for the Home Page Grid
-// FIXED: Reverted to standard 'Fiction' default.
-export async function getAllNewReleases(subject?: string, startIndex: number = 0): Promise<SearchResultItem[]> {
-  const effectiveSubject = subject || 'Fiction';
-  const subjectQuery = `&subject=${encodeURIComponent(effectiveSubject)}`;
+// Updated to intelligently route traffic based on 'sort'
+export async function searchBooks(
+    query: string, 
+    subject?: string, 
+    startIndex: number = 0,
+    sort: 'relevance' | 'new' = 'relevance' 
+): Promise<SearchResultItem[]> {
   
-  const data: HybridSearchResponse = await fetcher(
-    `${API_BASE}/new-releases?limit=40&startIndex=${startIndex}${subjectQuery}`
-  );
+  if (!query && !subject) return [];
 
-  const rawResults = data?.results || [];
+  // STRATEGY SWITCH: If "See All New" is requested, switch to the New Releases endpoint
+  if (sort === 'new') {
+      const limit = 40;
+      const subjectParam = subject || 'Fiction'; // Fallback if no subject provided
+      
+      // We ignore 'query' here because new releases endpoint is subject-based.
+      // If you want to support "New books matching 'Star Wars'", backend needs a specific endpoint.
+      // For now, we assume "See All" is primarily genre-driven.
+      const data: HybridSearchResponse = await fetcher(
+        `${API_BASE}/new-releases?subject=${encodeURIComponent(subjectParam)}&limit=${limit}&startIndex=${startIndex}`
+      );
+      
+      const rawResults = data?.results || [];
 
-  return rawResults
-    .filter(book => {
-        if (!isValidBook(book)) return false;
-        if (!isRecentBook(book)) return false; 
-        if (!book.cover_url) return false; 
-        return true;
-    })
-    .sort(sortPopularity)
-    .slice(0, 12);
-}
+      // Apply the strict Freshness Architecture filters
+      return rawResults
+        .filter(book => isValidBook(book) && isRecentBook(book)) 
+        .filter(book => book.cover_url)
+        .sort(sortRecency);
+  } 
 
-export async function getBookByIsbn(isbn: string): Promise<MergedBook | null> {
-  const book = await fetcher(`${API_BASE}/book/isbn/${isbn}`);
-  return book;
-}
-
-export async function searchBooks(query: string, subject?: string, startIndex: number = 0): Promise<SearchResultItem[]> {
-  if (!query) return [];
-  
+  // STANDARD BEHAVIOR: Hit the Search endpoint
   const subjectQuery = subject ? `&subject=${encodeURIComponent(subject)}` : '';
-
+  const textQuery = query ? encodeURIComponent(query) : '';
+  
   const data: HybridSearchResponse = await fetcher(
-    `${API_BASE}/search?q=${encodeURIComponent(query)}${subjectQuery}&limit=20&startIndex=${startIndex}`
+    `${API_BASE}/search?q=${textQuery}${subjectQuery}&limit=40&startIndex=${startIndex}`
   );
   
   const rawResults = data?.results || [];
 
+  // Standard Search mode uses relaxed filtering (allows classics)
   return rawResults
     .filter(book => book.isbn_13 || book.isbn_10)
-    .sort(sortQualityBooks); 
+    .sort(sortQualityBooks);
 }
 
 export async function getFictionGenres(): Promise<{ name: string; umbrella: string }[]> {
   const baseUrl = API_BASE.replace('/books', '');
   const data = await fetcher(`${baseUrl}/genres/fiction`);
   return data || [];
+}
+
+export async function getAllNewReleases(subject?: string, startIndex: number = 0): Promise<SearchResultItem[]> {
+  return (await getNewReleases(subject, startIndex)).books;
+}
+
+export async function getBookByIsbn(isbn: string): Promise<MergedBook | null> {
+  const book = await fetcher(`${API_BASE}/book/isbn/${isbn}`);
+  return book;
 }

@@ -10,7 +10,7 @@ const Logo = ({ className }: { className?: string }) => {
       )}
     >
       <BookOpen className="h-7 w-7" />
-      <h1>The Index</h1>
+      <h1>BookFinder</h1>
     </div>
   );
 };

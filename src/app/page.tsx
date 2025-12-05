@@ -62,7 +62,7 @@ export default function Home() {
 
         {/* Footer / Trust Signals */}
         <footer className="text-center text-sm text-muted-foreground/60">
-          <p>Powered by Google Books & Open Library • 100% Algorithm Free</p>
+          <p>Powered by Google Books, Open Library and Library of Congress • 100% Algorithm Free</p>
         </footer>
 
       </div>

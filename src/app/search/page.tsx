@@ -6,14 +6,25 @@ import PageHeader from '@/components/page-header';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 
-async function SearchResults({ query }: { query: string }) {
-  const results = await searchBooks(query);
+// Updated Props to accept 'sort'
+async function SearchResults({ 
+  query, 
+  subject, 
+  sort 
+}: { 
+  query: string; 
+  subject?: string; 
+  sort?: string 
+}) {
+  // Pass the sort parameter to the backend action
+  // Defaulting to 'relevance' if undefined, though the action handles defaults too.
+  const results = await searchBooks(query, subject, 0, sort as 'relevance' | 'new');
 
   if (results.length === 0) {
     return (
       <div className="text-center py-16">
         <p className="text-xl text-muted-foreground mb-4">
-          No books found for &quot;{query}&quot;.
+          No books found{query ? ` for "${query}"` : ''}{subject ? ` in ${subject}` : ''}.
         </p>
         <Button asChild>
             <Link href="/">Back to Home</Link>
@@ -25,7 +36,6 @@ async function SearchResults({ query }: { query: string }) {
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-6">
       {results.map((book, i) => (
-        // *** FIX: Use index as fallback key ***
         <BookCard key={book.isbn_13 || `search-book-${i}`} book={book} />
       ))}
     </div>
@@ -37,7 +47,7 @@ function SearchSkeleton() {
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-6">
       {Array.from({ length: 10 }).map((_, i) => (
         <div key={i} className="space-y-2">
-          <Skeleton className="aspect-[2/3] w-full" />
+          <Skeleton className="aspect-[2/3] w-full rounded-md" />
           <Skeleton className="h-4 w-3/4" />
           <Skeleton className="h-4 w-1/2" />
         </div>
@@ -49,23 +59,40 @@ function SearchSkeleton() {
 export default async function SearchPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>;
+  // Update type definition to include sort
+  searchParams: Promise<{ q?: string; subject?: string; sort?: string }>;
 }) {
   const resolvedParams = await searchParams;
   const query = resolvedParams.q || '';
+  const subject = resolvedParams.subject || '';
+  const sort = resolvedParams.sort || 'relevance';
+
+  // Dynamic Title Logic
+  let titleContent;
+  
+  if (sort === 'new' && subject) {
+      // Special Header for "See All" from New Releases
+      titleContent = <>New <span className="text-primary">{subject}</span> Releases</>;
+  } else if (query && subject) {
+    titleContent = <>Results for <span className="text-primary">&quot;{query}&quot;</span> in <span className="text-primary">{subject}</span></>;
+  } else if (subject) {
+    titleContent = <>Top Results in <span className="text-primary">{subject}</span></>;
+  } else {
+    titleContent = <>Search Results for <span className="text-primary">&quot;{query}&quot;</span></>;
+  }
+
+  const description = sort === 'new' 
+    ? "Browsing the latest additions to our catalog." 
+    : "Showing books matching your criteria.";
 
   return (
     <main className="container mx-auto px-4 py-8">
       <PageHeader
-        title={
-          <>
-            Search Results for <span className="text-primary">&quot;{query}&quot;</span>
-          </>
-        }
-        description={`Showing books matching your query.`}
+        title={titleContent}
+        description={description}
       />
       <Suspense fallback={<SearchSkeleton />}>
-        <SearchResults query={query} />
+        <SearchResults query={query} subject={subject} sort={sort} />
       </Suspense>
     </main>
   );
