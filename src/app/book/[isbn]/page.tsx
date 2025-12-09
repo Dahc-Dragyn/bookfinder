@@ -15,6 +15,8 @@ import {
   Globe,
   Library,
   ExternalLink,
+  Landmark, // NEW: For Library of Congress
+  Database  // NEW: Generic fallback
 } from 'lucide-react';
 import BookCard from '@/components/book-card';
 import ExpandableText from '@/components/expandable-text';
@@ -73,7 +75,6 @@ export default async function BookDetailPage({
   // --- Data Prep ---
   const primaryAuthor = book.authors?.[0];
   const authorName = primaryAuthor?.name || 'Unknown Author';
-  const allAuthors = book.authors?.map(a => a.name).join(', ');
   const authorBio = primaryAuthor?.bio;
   
   const rating = book.average_rating || 0;
@@ -208,6 +209,33 @@ export default async function BookDetailPage({
                 ISBN: {book.isbn_13}
              </Badge>
            </div>
+
+           {/* Data Sources Badges (NEW) */}
+           {book.data_sources && book.data_sources.length > 0 && (
+            <div className="flex flex-wrap justify-center gap-2 pt-1 border-t border-border/40 mt-2 animate-in fade-in zoom-in duration-500 delay-200">
+              {book.data_sources.map((source) => {
+                let icon = <Database className="h-3 w-3" />;
+                let styles = "bg-muted text-muted-foreground border-border";
+
+                if (source === "Library of Congress") {
+                  icon = <Landmark className="h-3 w-3" />;
+                  styles = "bg-purple-500/10 text-purple-600 border-purple-200";
+                } else if (source === "Open Library") {
+                  icon = <Library className="h-3 w-3" />;
+                  styles = "bg-blue-500/10 text-blue-600 border-blue-200";
+                } else if (source === "Google Books") {
+                   icon = <Globe className="h-3 w-3" />;
+                   styles = "bg-amber-500/10 text-amber-600 border-amber-200";
+                }
+
+                return (
+                  <Badge key={source} variant="outline" className={`font-normal text-[10px] h-5 gap-1.5 ${styles}`}>
+                    {icon} {source}
+                  </Badge>
+                )
+              })}
+            </div>
+          )}
         </div>
 
         {/* --- RIGHT COLUMN: Content (8/12) --- */}
@@ -227,7 +255,24 @@ export default async function BookDetailPage({
             </div>
 
             <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
-               <span className="font-medium text-lg text-foreground">by <span className="text-primary">{allAuthors}</span></span>
+                <span className="font-medium text-lg text-foreground flex items-center gap-1">
+                  by{' '}
+                  {book.authors && book.authors.length > 0 ? (
+                    book.authors.map((author, i) => (
+                        <span key={i}>
+                            {i > 0 && ", "}
+                            <Link 
+                                href={`/author/${encodeURIComponent(author.key || author.name)}`}
+                                className="text-primary hover:underline hover:text-primary/80 transition-colors font-bold"
+                            >
+                                {author.name}
+                            </Link>
+                        </span>
+                    ))
+                  ) : (
+                    <span className="text-primary">Unknown Author</span>
+                  )}
+                </span>
                
                <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-yellow-500/10 text-yellow-600 dark:text-yellow-500 border border-yellow-500/20">
                  <Star className="h-3.5 w-3.5 fill-current" />

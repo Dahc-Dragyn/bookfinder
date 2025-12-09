@@ -83,6 +83,9 @@ export interface MergedBook {
   format_tag?: string;
   related_isbns?: string[];
   content_flag?: string;
+
+  // v4.2 Source Attribution (NEW)
+  data_sources?: string[]; 
 }
 
 export interface SearchResultItem {
@@ -92,7 +95,7 @@ export interface SearchResultItem {
   isbn_13?: string;
   isbn_10?: string;
   publisher?: string;
-  published_date?: string; // Fixed: Added this
+  published_date?: string;
   average_rating?: number;
   ratings_count?: number;
   categories?: string[];
@@ -102,7 +105,12 @@ export interface SearchResultItem {
   
   // v2.0 New Fields
   series?: SeriesInfo;
-  format_tag?: string; // Fixed: Added this
+  format_tag?: string;
+  description?: string; 
+  
+  // v4.0 New Fields (Attribution & Linking)
+  data_sources?: string[];
+  lccn?: string[]; // NEW: Critical for linking to LOC items
 }
 
 export interface HybridSearchResponse {
@@ -110,4 +118,21 @@ export interface HybridSearchResponse {
   subject?: string;
   num_found: number;
   results: SearchResultItem[];
+}
+
+export interface NewReleasesResponse {
+  subject?: string;
+  num_found: number;
+  results: SearchResultItem[];
+}
+
+export interface AuthorPageData {
+  key: string;
+  name: string;
+  bio?: string | null;
+  birth_date?: string | null;
+  death_date?: string | null;
+  photo_url?: string | null;
+  books: SearchResultItem[];
+  source: 'open_library' | 'google_books';
 }
