@@ -86,6 +86,10 @@ export interface MergedBook {
 
   // v4.2 Source Attribution (NEW)
   data_sources?: string[]; 
+  
+  // v4.6 LOC Fields (NEW)
+  lccn?: string[];
+  loc_url?: string;
 }
 
 export interface SearchResultItem {
@@ -110,7 +114,7 @@ export interface SearchResultItem {
   
   // v4.0 New Fields (Attribution & Linking)
   data_sources?: string[];
-  lccn?: string[]; // NEW: Critical for linking to LOC items
+  lccn?: string[]; 
 }
 
 export interface HybridSearchResponse {

@@ -15,8 +15,9 @@ import {
   Globe,
   Library,
   ExternalLink,
-  Landmark, // NEW: For Library of Congress
-  Database  // NEW: Generic fallback
+  Landmark, 
+  Database,
+  Building2 // Icon for LOC
 } from 'lucide-react';
 import BookCard from '@/components/book-card';
 import ExpandableText from '@/components/expandable-text';
@@ -53,15 +54,15 @@ export default async function BookDetailPage({
 }) {
   const { isbn } = await params;
   
-  console.log(`[BookDetail] Fetching ISBN: ${isbn}`);
+  console.log(`[BookDetail] Fetching ID: ${isbn}`);
   const book = await getBookByIsbn(isbn);
 
   if (!book) {
     return (
       <main className="container mx-auto px-4 py-16 text-center min-h-[60vh] flex flex-col items-center justify-center">
-        <h1 className="text-4xl font-bold font-headline mb-4">Book Not Found</h1>
+        <h1 className="text-4xl font-bold font-headline mb-4">Item Not Found</h1>
         <p className="text-muted-foreground mb-8 text-lg max-w-md mx-auto">
-          We couldn&apos;t find detailed information for ISBN <span className="font-mono text-foreground">{isbn}</span>.
+          We couldn&apos;t find detailed information for ID <span className="font-mono text-foreground">{isbn}</span>.
         </p>
         <Button asChild variant="outline" size="lg">
             <Link href="/">
@@ -74,25 +75,25 @@ export default async function BookDetailPage({
 
   // --- Data Prep ---
   const primaryAuthor = book.authors?.[0];
-  const authorName = primaryAuthor?.name || 'Unknown Author';
+  const authorName = primaryAuthor?.name || 'Unknown Contributor';
   const authorBio = primaryAuthor?.bio;
   
   const rating = book.average_rating || 0;
   const ratingCount = book.ratings_count || 0;
 
-  // --- INTELLIGENT COVER LOGIC (Frontend Edition) ---
-  // 1. Default to "Modern" (Optimistic) unless proven otherwise.
+  // --- LOC DETECTION ---
+  const isLocItem = book.data_sources?.includes('Library of Congress');
+  const locUrl = book.loc_url; // Assuming backend provides this, or we construct it via LCCN
+
+  // --- INTELLIGENT COVER LOGIC ---
   let isModern = true; 
-  
   if (book.published_date && book.published_date.length >= 4) {
       const year = parseInt(book.published_date.substring(0, 4));
-      // Only downgrade to "Classic" if we are sure it is old (Pre-2005)
       if (!isNaN(year) && year < 2005) {
           isModern = false;
       }
   }
 
-  // 2. Get Base URLs with Type Predicate
   const rawUrls: string[] = [
     book.google_cover_links?.extraLarge,
     book.google_cover_links?.large,
@@ -104,42 +105,27 @@ export default async function BookDetailPage({
     book.open_library_cover_links?.small
   ].filter((url): url is string => url !== null && url !== undefined && url !== '');
 
-  // 3. Apply Logic
   let finalUrls: string[] = [];
   
   if (isModern) {
-     // MODERN: Force Optimism. 
-     const googleThumb = rawUrls.find(u => u?.includes('books.google.com'));
-     if (googleThumb) {
-        // Create Safe High-Res URL (with 15KB guard)
+      const googleThumb = rawUrls.find(u => u?.includes('books.google.com'));
+      if (googleThumb) {
         const highRes = googleThumb
             .replace(/zoom=[0-9]/, 'zoom=0')
             .replace('&edge=curl', '') 
             + '&minSize=15000'; 
-        
         finalUrls.push(highRes);
-     }
-
-     // CRITICAL FIX: Filter out "unsafe" zoom=0 links from the raw list.
-     // We only want the one we just created with the minSize guard.
-     // If that fails, we want to fall back to Open Library or Thumbnails (zoom=1+),
-     // NOT to the unguarded zoom=0 links that return placeholders.
-     const safeFallbacks = rawUrls.filter(u => !u?.includes('zoom=0'));
-     finalUrls = [...finalUrls, ...safeFallbacks];
-
+      }
+      const safeFallbacks = rawUrls.filter(u => !u?.includes('zoom=0'));
+      finalUrls = [...finalUrls, ...safeFallbacks];
   } else {
-     // CLASSIC: Safety First.
-     // Explicitly filter out zoom=0.
-     finalUrls = rawUrls.filter(u => !u?.includes('zoom=0'));
+      finalUrls = rawUrls.filter(u => !u?.includes('zoom=0'));
   }
-
-  console.log(`[BookDetail] Date: ${book.published_date}. Is Modern? ${isModern}. Final URLs:`, finalUrls);
 
   const price = book.sale_info?.listPrice?.amount 
     ? `$${book.sale_info.listPrice.amount} ${book.sale_info.listPrice.currencyCode}`
     : null;
 
-  // --- Smart Filtering for Genres ---
   let displaySubjects = book.subjects || [];
   if (displaySubjects.length > 1) {
     displaySubjects = displaySubjects.filter(s => 
@@ -166,51 +152,79 @@ export default async function BookDetailPage({
         
         {/* --- LEFT COLUMN: Visuals & Actions (4/12) --- */}
         <div className="md:col-span-4 lg:col-span-4 flex flex-col gap-4">
-          {/* Cover Image */}
-          <div className="relative aspect-[2/3] w-full rounded-lg overflow-hidden shadow-2xl bg-secondary/20 border border-border/50 group">
-            <BookCover urls={finalUrls} title={book.title} />
+          
+          {/* Cover Image or LOC Placeholder */}
+          <div className="relative aspect-[2/3] w-full rounded-lg overflow-hidden shadow-2xl bg-secondary/20 border border-border/50 group flex items-center justify-center">
+            {finalUrls.length > 0 ? (
+                <BookCover urls={finalUrls} title={book.title} />
+            ) : (
+                // LOC Fallback Display
+                <div className={`flex flex-col items-center justify-center p-6 text-center h-full w-full ${isLocItem ? 'bg-purple-500/10 text-purple-700' : 'bg-muted text-muted-foreground'}`}>
+                    {isLocItem ? <Landmark className="h-20 w-20 mb-4 opacity-50" /> : <BookOpen className="h-20 w-20 mb-4 opacity-20" />}
+                    <span className="font-headline font-bold text-sm leading-tight opacity-70 px-4">
+                        {isLocItem ? "Archival Material" : "No Cover Available"}
+                    </span>
+                </div>
+            )}
           </div>
 
           {/* Actions Grid */}
           <div className="space-y-3">
-            {/* Buy Button */}
-            {book.sale_info?.buyLink ? (
-                <Button asChild className="w-full text-lg h-12 shadow-md font-bold tracking-wide" size="lg">
-                <a href={book.sale_info.buyLink} target="_blank" rel="noopener noreferrer">
-                    <ShoppingCart className="mr-2 h-5 w-5" />
-                    Buy eBook {price ? `• ${price}` : ''}
-                </a>
+            
+            {/* PRIMARY ACTION BUTTON */}
+            {isLocItem ? (
+                // LOC Action
+                <Button asChild className="w-full text-lg h-12 shadow-md font-bold tracking-wide bg-purple-700 hover:bg-purple-800 text-white" size="lg">
+                    {/* Construct LOC link if missing from API */}
+                    <a href={book.loc_url || `https://lccn.loc.gov/${book.lccn?.[0] || isbn}`} target="_blank" rel="noopener noreferrer">
+                        <Building2 className="mr-2 h-5 w-5" />
+                        View at LOC.gov
+                    </a>
                 </Button>
             ) : (
-                <Button disabled variant="secondary" className="w-full h-12">
-                    eBook Not Available
-                </Button>
+                // Commercial Action
+                book.sale_info?.buyLink ? (
+                    <Button asChild className="w-full text-lg h-12 shadow-md font-bold tracking-wide" size="lg">
+                        <a href={book.sale_info.buyLink} target="_blank" rel="noopener noreferrer">
+                            <ShoppingCart className="mr-2 h-5 w-5" />
+                            Buy eBook {price ? `• ${price}` : ''}
+                        </a>
+                    </Button>
+                ) : (
+                    <Button disabled variant="secondary" className="w-full h-12">
+                        eBook Not Available
+                    </Button>
+                )
             )}
 
             {/* Find in Library (WorldCat) */}
             <Button variant="outline" asChild className="w-full h-12 border-primary/30 hover:bg-primary/5 text-foreground">
-                <a href={`https://www.worldcat.org/search?q=${book.isbn_13}`} target="_blank" rel="noopener noreferrer">
+                <a href={`https://www.worldcat.org/search?q=${book.isbn_13 || isbn}`} target="_blank" rel="noopener noreferrer">
                     <Library className="mr-2 h-5 w-5 text-primary" /> 
                     Find in Library
                 </a>
             </Button>
 
-            {/* Preview Link */}
-            <Button variant="ghost" size="sm" asChild className="w-full text-muted-foreground hover:text-foreground">
-                <a href={`https://books.google.com/books?isbn=${book.isbn_13}`} target="_blank" rel="noopener noreferrer">
-                     Preview on Google Books <ExternalLink className="ml-1.5 h-3 w-3" />
-                </a>
-            </Button>
+            {/* Preview Link (Only show if Google) */}
+            {!isLocItem && (
+                <Button variant="ghost" size="sm" asChild className="w-full text-muted-foreground hover:text-foreground">
+                    <a href={`https://books.google.com/books?isbn=${book.isbn_13 || isbn}`} target="_blank" rel="noopener noreferrer">
+                        Preview on Google Books <ExternalLink className="ml-1.5 h-3 w-3" />
+                    </a>
+                </Button>
+            )}
           </div>
 
-           {/* ISBN Badge */}
+           {/* ID Badge (ISBN or LCCN) */}
            <div className="flex justify-center pt-2">
              <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground/70 font-normal border-dashed">
-                ISBN: {book.isbn_13}
+               {isLocItem && book.lccn && book.lccn.length > 0 
+                  ? `LCCN: ${book.lccn[0]}` 
+                  : `ISBN: ${book.isbn_13 || isbn}`}
              </Badge>
            </div>
 
-           {/* Data Sources Badges (NEW) */}
+           {/* Data Sources Badges */}
            {book.data_sources && book.data_sources.length > 0 && (
             <div className="flex flex-wrap justify-center gap-2 pt-1 border-t border-border/40 mt-2 animate-in fade-in zoom-in duration-500 delay-200">
               {book.data_sources.map((source) => {
@@ -274,11 +288,13 @@ export default async function BookDetailPage({
                   )}
                 </span>
                
-               <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-yellow-500/10 text-yellow-600 dark:text-yellow-500 border border-yellow-500/20">
-                 <Star className="h-3.5 w-3.5 fill-current" />
-                 <span className="font-bold">{rating > 0 ? rating.toFixed(1) : 'N/A'}</span>
-                 <span className="text-xs opacity-80 ml-1">({ratingCount} reviews)</span>
-               </div>
+               {!isLocItem && (
+                   <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-yellow-500/10 text-yellow-600 dark:text-yellow-500 border border-yellow-500/20">
+                     <Star className="h-3.5 w-3.5 fill-current" />
+                     <span className="font-bold">{rating > 0 ? rating.toFixed(1) : 'N/A'}</span>
+                     <span className="text-xs opacity-80 ml-1">({ratingCount} reviews)</span>
+                   </div>
+               )}
             </div>
           </header>
 
@@ -286,10 +302,10 @@ export default async function BookDetailPage({
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-y-6 gap-x-4 py-6 border-y border-border/60">
              <div className="flex flex-col gap-1">
                 <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                  <BookType className="h-3 w-3" /> Length
+                  <BookType className="h-3 w-3" /> Format
                 </span>
                 <span className="text-sm font-medium font-mono text-foreground">
-                  {book.page_count ? `${book.page_count} pages` : '-'}
+                  {book.page_count ? `${book.page_count} pages` : (book.format_tag || 'Unknown')}
                 </span>
              </div>
              <div className="flex flex-col gap-1">
@@ -358,7 +374,7 @@ export default async function BookDetailPage({
           {/* Description */}
           <section className="space-y-3">
             <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-              <BookOpen className="h-3.5 w-3.5" /> Synopsis
+              <BookOpen className="h-3.5 w-3.5" /> {isLocItem ? "Archival Description" : "Synopsis"}
             </h3>
             {book.description ? (
                <ExpandableText text={book.description} />
@@ -392,7 +408,7 @@ export default async function BookDetailPage({
       </div>
 
       {/* Footer */}
-      <MoreByAuthor authorName={authorName} currentIsbn={book.isbn_13} />
+      <MoreByAuthor authorName={authorName} currentIsbn={book.isbn_13 || isbn} />
 
     </main>
   );

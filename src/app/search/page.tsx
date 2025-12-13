@@ -17,7 +17,6 @@ async function SearchResults({
   sort?: string 
 }) {
   // Pass the sort parameter to the backend action
-  // Defaulting to 'relevance' if undefined, though the action handles defaults too.
   const results = await searchBooks(query, subject, 0, sort as 'relevance' | 'new');
 
   if (results.length === 0) {
@@ -36,7 +35,12 @@ async function SearchResults({
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-6">
       {results.map((book, i) => (
-        <BookCard key={book.isbn_13 || `search-book-${i}`} book={book} />
+        // FIX: Robust key fallback. LCCN items have no ISBN, so we check that array.
+        // If all IDs fail, we fall back to title + index to ensure unique keys.
+        <BookCard 
+            key={book.isbn_13 || (book.lccn && book.lccn[0]) || `${book.title}-${i}`} 
+            book={book} 
+        />
       ))}
     </div>
   );
@@ -59,7 +63,6 @@ function SearchSkeleton() {
 export default async function SearchPage({
   searchParams,
 }: {
-  // Update type definition to include sort
   searchParams: Promise<{ q?: string; subject?: string; sort?: string }>;
 }) {
   const resolvedParams = await searchParams;
