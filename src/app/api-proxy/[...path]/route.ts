@@ -9,10 +9,10 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const rawUrl = searchParams.get("url");
   
-  // Allow the frontend to specify a minimum size limit.
-  // Default to 2000 bytes (2KB) if not specified to block 1x1 pixels.
+  // Relaxed Default: 500 bytes is safer than 2000. 
+  // It still catches 1x1 pixels (approx 43 bytes) but allows valid tiny thumbnails.
   const minSizeParam = searchParams.get("minSize");
-  const minSizeBytes = minSizeParam ? parseInt(minSizeParam) : 2000;
+  const minSizeBytes = minSizeParam ? parseInt(minSizeParam) : 500;
 
   if (!rawUrl) {
     return new NextResponse("Missing image URL", { status: 400 });
@@ -37,7 +37,8 @@ export async function GET(req: Request) {
   try {
     const response = await fetch(targetUrl, {
       headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        // Use a generic User-Agent to avoid Google blocking "bot-like" requests
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
       },
     });
 
