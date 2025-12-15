@@ -9,14 +9,21 @@ import type {
 } from '@/lib/types';
 
 // --- CONFIGURATION ---
-// Ensure this points to your Python Backend (localhost:8000 or ngrok)
-const API_BASE = (process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://127.0.0.1:8000') + '/books';
+// Priority: 
+// 1. BACKEND_API_URL (Server-side explicit - Cloud Run)
+// 2. NEXT_PUBLIC_BACKEND_API_URL (Client/Build shared)
+// 3. Fallback to localhost (Dev default)
+const BASE_URL = process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://127.0.0.1:8000';
+const API_BASE = `${BASE_URL}/books`;
+
+console.log(`[Config] API_BASE set to: ${API_BASE}`); // Debug Log
 
 // --- HELPER: Fetcher ---
 async function fetcher(url: string): Promise<any> {
-    // We use 'no-store' to prevent Next.js from serving stale data (Critical for Search)
+    // DEBUG MODE: revalidate set to 0 to disable caching entirely.
+    // This ensures we always get the real error from the backend if it exists.
     const response = await fetch(url, { 
-        cache: 'no-store', 
+        next: { revalidate: 3600 }, 
         headers: { 'ngrok-skip-browser-warning': 'true' }
     });
     
@@ -74,26 +81,23 @@ export async function searchBooks(
         `${API_BASE}/search?q=${textQuery}${subjectQuery}&limit=40&startIndex=${startIndex}`
     );
     
-    // 🔥 FIX APPLIED: Allow items with ISBN OR LCCN. 
-    // This prevents LoC items (like documents) from being filtered out.
+    // Allow items with ISBN OR LCCN. 
     return (data?.results || []).filter(book => 
         book.isbn_13 || 
         book.isbn_10 || 
-        (book.lccn && book.lccn.length > 0) // <-- NOW CORRECTLY INCLUDED
+        (book.lccn && book.lccn.length > 0)
     );
 }
 
 // --- Fetch Author Profile (Dual-Mode) ---
 export async function getAuthorProfile(id: string): Promise<AuthorPageData | null> {
     if (!id) return null;
-    // This endpoint handles both OL keys (OL26320A) and Names (Megan Bledsoe)
-    // Backend v4.0 handles the sanitization and mining.
     const data = await fetcher(`${API_BASE}/author/${encodeURIComponent(id)}`);
     return data;
 }
 
 export async function getFictionGenres(): Promise<{ name: string; umbrella: string }[]> {
-    // Adjust base URL to hit the root genres endpoint
+    // Adjust base URL to hit the root genres endpoint (removes /books suffix)
     const baseUrl = API_BASE.replace('/books', '');
     const data = await fetcher(`${baseUrl}/genres/fiction`);
     return data || [];
@@ -105,7 +109,6 @@ export async function getAllNewReleases(subject?: string, startIndex: number = 0
 }
 
 export async function getBookByIsbn(isbn: string): Promise<MergedBook | null> {
-    // This endpoint now handles ISBNs (978...) AND LCCNs (2013...)
     const book = await fetcher(`${API_BASE}/book/isbn/${isbn}`);
     return book;
 }

@@ -14,6 +14,11 @@ import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { ArrowRight, Flame } from 'lucide-react';
 
+// --- CRITICAL FIX FOR DEPLOYMENT ---
+// This prevents Next.js from trying to fetch data during 'npm run build'
+// We want this page to be dynamic (fetched on request) anyway!
+export const dynamic = 'force-dynamic';
+
 // --- CONFIGURATION ---
 const GENRE_POOL = [
   'Sci-Fi', 
@@ -33,7 +38,9 @@ function getRandomGenres(count: number): string[] {
   return shuffled.slice(0, count);
 }
 
-// --- COMPONENT: Single Book Stripe ---
+// ... Rest of the file remains exactly the same ...
+// (Copy the BookStripe component, NewReleasesFeed, and default export from your original file)
+
 async function BookStripe({ genre, title, icon }: { genre: string, title?: React.ReactNode, icon?: React.ReactNode }) {
   const { books } = await getNewReleases(genre);
 
@@ -80,15 +87,10 @@ async function BookStripe({ genre, title, icon }: { genre: string, title?: React
   );
 }
 
-// --- MAIN CONTENT ---
 async function NewReleasesFeed() {
-  // 1. "Hot This Week" is fixed (Fiction is usually a safe proxy for 'General Hot')
   const hotPromise = getNewReleases('Fiction');
-  
-  // 2. Pick 3 random genres for the discovery stripes
   const randomGenres = getRandomGenres(3);
   
-  // 3. Fetch all in parallel
   const [hotData, ...stripeData] = await Promise.all([
     hotPromise,
     ...randomGenres.map(g => getNewReleases(g))
@@ -96,7 +98,6 @@ async function NewReleasesFeed() {
 
   return (
     <div className="space-y-2">
-      {/* Hero Stripe: Hot This Week */}
       <section className="space-y-4 py-6">
          <div className="flex items-center gap-2 mb-2">
             <h2 className="text-3xl md:text-4xl font-bold font-headline flex items-center gap-2">
@@ -126,7 +127,6 @@ async function NewReleasesFeed() {
          </Carousel>
       </section>
 
-      {/* Dynamic Discovery Stripes */}
       {randomGenres.map((genre) => (
         <BookStripe key={genre} genre={genre} />
       ))}
@@ -134,17 +134,13 @@ async function NewReleasesFeed() {
   );
 }
 
-// --- SKELETON LOADING STATE ---
 function NewReleasesSkeleton() {
   return (
     <div className="space-y-12">
-      {/* Header Skeleton */}
       <div className="space-y-4">
          <Skeleton className="h-10 w-64 rounded-md" />
          <Skeleton className="h-6 w-96 rounded-md" />
       </div>
-
-      {/* Stripe Skeletons */}
       {Array.from({ length: 3 }).map((_, i) => (
         <div key={i} className="space-y-4">
           <div className="flex justify-between items-center">

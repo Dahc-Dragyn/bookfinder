@@ -1,0 +1,22 @@
+import { MetadataRoute } from 'next';
+
+export default function robots(): MetadataRoute.Robots {
+  return {
+    rules: [
+      {
+        userAgent: '*',
+        allow: '/',
+        // 1. Disallow internal API routes (standard)
+        // 2. Disallow Search results (Huge resource saver!)
+        // 3. Disallow Author pages if they are too heavy (optional)
+        disallow: ['/api/', '/_next/', '/search', '/author/'],
+      },
+      {
+        // Optional: If you want to block AI scrapers entirely
+        userAgent: 'GPTBot',
+        disallow: ['/'],
+      }
+    ],
+    sitemap: 'https://bookfinder.aiyoda.app/sitemap.xml',
+  };
+}

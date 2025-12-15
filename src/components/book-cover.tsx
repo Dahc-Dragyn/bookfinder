@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Book } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface BookCoverProps {
-  url?: string | null; // Legacy support for single URL
-  urls?: (string | null | undefined)[]; // New support for multiple fallback URLs
+  url?: string | null; 
+  urls?: (string | null | undefined)[]; 
   title: string;
   className?: string;
 }
@@ -14,23 +14,27 @@ interface BookCoverProps {
 export default function BookCover({ url, urls, title, className }: BookCoverProps) {
   const cleanTitle = title.replace(/<[^>]*>?/gm, '').substring(0, 50);
 
-  // 1. Build the Candidate List
-  const rawCandidates = urls && urls.length > 0 ? urls : [url];
-  const validCandidates = rawCandidates.filter((u): u is string => !!u);
+  // 1. Build the Unique Candidate List (Deduplicated)
+  // We use useMemo to prevent this from recalculating on every render
+  const validCandidates = useMemo(() => {
+    const raw = urls && urls.length > 0 ? urls : [url];
+    const filtered = raw.filter((u): u is string => !!u && u.length > 0);
+    return Array.from(new Set(filtered)); // Deduplicate to prevent retrying same URL
+  }, [url, urls]);
 
   // State to track which index we are currently trying to load
   const [failedIndex, setFailedIndex] = useState(-1); 
 
-  // Reset state when the book changes
+  // Reset state ONLY when the list of candidates actually changes
   useEffect(() => {
     setFailedIndex(-1);
-  }, [title, JSON.stringify(validCandidates)]);
+  }, [JSON.stringify(validCandidates)]);
 
   // 2. Determine current attempt
   const currentIndex = failedIndex + 1;
   const currentUrl = validCandidates[currentIndex];
 
-  // 3. Fallback State
+  // 3. Fallback State (Show placeholder if we ran out of URLs)
   const showPlaceholder = !currentUrl || currentIndex >= validCandidates.length;
 
   if (showPlaceholder) {
@@ -42,29 +46,26 @@ export default function BookCover({ url, urls, title, className }: BookCoverProp
       );
   }
 
-  // 4. Proxy Logic (FIXED to handle minSize)
+  // 4. Proxy Logic
   let srcToRender = currentUrl;
   if (srcToRender.includes('books.google.com')) {
-      // Check if there is a size requirement embedded in the URL
       let sizeParam = '';
       if (srcToRender.includes('minSize=')) {
           const match = srcToRender.match(/minSize=(\d+)/);
           if (match) {
               sizeParam = `&minSize=${match[1]}`;
-              // Remove it from the target URL so Google doesn't see it (it ignores it anyway, but cleaner)
               srcToRender = srcToRender.replace(/&minSize=\d+/, '');
           }
       }
-      // Construct the proxy URL with the extracted parameter
       srcToRender = `/api-proxy/image?url=${encodeURIComponent(srcToRender)}${sizeParam}`;
   }
 
   // 5. Image Load Handler
   const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
     const img = e.currentTarget;
-    // Check natural dimensions (Ghost Success Check)
+    // Ghost Check: If image loads but is a 1x1 pixel (Google tracking pixel), treat as fail
     if (img.naturalWidth < 5 || img.naturalHeight < 5) {
-        console.warn(`[BookCover] Ghost success detected (tiny image: ${img.naturalWidth}x${img.naturalHeight}) for: ${currentUrl}. Retrying...`);
+        // console.warn(`[BookCover] Ghost success (1x1 pixel) for: ${currentUrl}. Retrying next...`);
         setFailedIndex(prev => prev + 1);
     }
   };
@@ -78,7 +79,7 @@ export default function BookCover({ url, urls, title, className }: BookCoverProp
         loading="lazy"
         onLoad={handleImageLoad} 
         onError={() => {
-            console.warn(`[BookCover] Failed to load cover (Network Error or Proxy Block): ${currentUrl}. Trying next candidate.`);
+            // console.warn(`[BookCover] Failed to load: ${currentUrl}. Retrying next...`);
             setFailedIndex(prev => prev + 1);
         }}
     />
