@@ -1,141 +1,79 @@
 import { NextResponse } from "next/server";
 
-const GOOGLE_PLACEHOLDER_PATTERNS = [
-  "no_cover_thumb.gif",
-];
+// 1. CONFIGURATION
+// The URL of your Python Backend (e.g., your ngrok URL)
+const BACKEND_URL = process.env.BACKEND_API_URL;
 
-// 🛑 Known aggressive bots & AI scrapers
-const BANNED_BOT_STRINGS = [
-  "Amazonbot",
-  "Bytespider",
-  "ClaudeBot",
-  "GPTBot",
-  "CCBot",
-  "ImagesiftBot",
-  "PerplexityBot",
-  "Applebot-Extended",
-  "cohere-ai",
-  "Diffbot",
-  "Omgili",
-  "FacebookBot", 
-];
+// The Secret Key (Must match what is in your Caddyfile)
+const PROXY_SECRET = process.env.PROXY_SECRET || "dev-secret-123";
 
-// Absolute safety limits
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5MB hard cap
-const FETCH_TIMEOUT_MS = 4000; // 4 seconds max
+// 2. SUPPORTED METHODS
+// We export these individually to let Next.js know which methods are allowed
+export async function GET(req: Request, { params }: { params: Promise<{ path: string[] }> }) {
+  return handleProxy(req, await params);
+}
 
-export async function GET(req: Request) {
-  /* ────────────────────────────────
-     1. CHEAP SHIELDS (NO CPU WORK)
-     ──────────────────────────────── */
-  
-  // A. Block known bad bots by name
-  const ua = req.headers.get("user-agent") || "";
-  if (BANNED_BOT_STRINGS.some(bot => ua.includes(bot))) {
-    return new NextResponse("Forbidden", { status: 403 });
+export async function POST(req: Request, { params }: { params: Promise<{ path: string[] }> }) {
+  return handleProxy(req, await params);
+}
+
+export async function PUT(req: Request, { params }: { params: Promise<{ path: string[] }> }) {
+  return handleProxy(req, await params);
+}
+
+export async function DELETE(req: Request, { params }: { params: Promise<{ path: string[] }> }) {
+  return handleProxy(req, await params);
+}
+
+export async function PATCH(req: Request, { params }: { params: Promise<{ path: string[] }> }) {
+  return handleProxy(req, await params);
+}
+
+// 3. THE PROXY LOGIC
+async function handleProxy(req: Request, params: { path: string[] }) {
+  if (!BACKEND_URL) {
+    console.error("❌ BACKEND_API_URL is not set in environment variables");
+    return new NextResponse(
+      JSON.stringify({ error: "Configuration Error: Backend URL missing" }), 
+      { status: 500, headers: { "Content-Type": "application/json" } }
+    );
   }
 
-  // B. "Browser-Only" Check (The Pro Move)
-  // Bots (like curl or python scripts) usually fail to send these headers.
-  const secFetch = req.headers.get("sec-fetch-site");
-  const accept = req.headers.get("accept");
-
-  if (!secFetch || !accept?.includes("image")) {
-    // Note: If you test this in a browser tab manually, it might fail. 
-    // It is designed to work for <img> tags on your site.
-    return new NextResponse("Forbidden", { status: 403 });
-  }
-
-  /* ────────────────────────────────
-     2. INPUT VALIDATION
-     ──────────────────────────────── */
-
-  const { searchParams } = new URL(req.url);
-  const rawUrl = searchParams.get("url");
-  const minSizeBytes = parseInt(searchParams.get("minSize") || "500");
-
-  if (!rawUrl) {
-    return new NextResponse("Missing image URL", { status: 400 });
-  }
-
-  let targetUrl: URL;
-  try {
-    targetUrl = new URL(decodeURIComponent(rawUrl));
-  } catch {
-    return new NextResponse("Invalid URL", { status: 400 });
-  }
-
-  // Security: Only allow HTTPS
-  if (targetUrl.protocol !== "https:") {
-    return new NextResponse("Only HTTPS allowed", { status: 400 });
-  }
-
-  // Google Specific Cleanup
-  if (
-    targetUrl.hostname.includes("books.google.com") ||
-    targetUrl.hostname.includes("googleusercontent.com")
-  ) {
-    // Block known "No Cover" placeholders to save bandwidth
-    if (GOOGLE_PLACEHOLDER_PATTERNS.some(p => targetUrl.href.includes(p))) {
-      return new NextResponse(null, { status: 404 });
-    }
-    // Remove the 'edge=curl' param which causes issues
-    targetUrl.searchParams.delete("edge");
-  }
-
-  /* ────────────────────────────────
-     3. SINGLE FETCH (OPTIMIZED)
-     ──────────────────────────────── */
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  // Reconstruct the path (e.g., /api-proxy/books/123 -> /books/123)
+  const pathString = params.path.join("/");
+  const { search } = new URL(req.url);
+  const targetUrl = `${BACKEND_URL}/${pathString}${search}`;
 
   try {
-    const response = await fetch(targetUrl.href, {
+    // Forward the request to the Python Backend
+    const backendResponse = await fetch(targetUrl, {
+      method: req.method,
       headers: {
-        // We pretend to be a standard browser to avoid upstream blocking
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        // Pass original headers (Content-Type, Auth, etc.)
+        ...Object.fromEntries(req.headers),
+        
+        // 🔒 THE SECRET HANDSHAKE: This key allows entry into your Caddy tunnel
+        "X-Proxy-Secret": PROXY_SECRET,
+        
+        // Vital for ngrok: Host header must match the ngrok domain
+        "host": new URL(BACKEND_URL).host,
       },
-      signal: controller.signal,
+      // Pass body if it exists (for POST/PUT) and isn't a GET/HEAD
+      body: (req.method !== "GET" && req.method !== "HEAD") ? await req.blob() : undefined,
     });
 
-    if (!response.ok) {
-      return new NextResponse(null, { status: response.status });
-    }
-
-    // A. Check Headers BEFORE downloading the body (Saves Bandwidth)
-    const type = response.headers.get("content-type") || "";
-    if (!type.startsWith("image/")) {
-      return new NextResponse(null, { status: 404 });
-    }
-
-    const contentLength = parseInt(response.headers.get("content-length") || "0");
-    if (contentLength > MAX_IMAGE_BYTES) {
-      return new NextResponse(null, { status: 404 });
-    }
-
-    // B. Download the Buffer
-    const buffer = Buffer.from(await response.arrayBuffer());
-
-    // C. Final Size Check (In case Content-Length was fake)
-    if (buffer.byteLength < minSizeBytes || buffer.byteLength > MAX_IMAGE_BYTES) {
-      return new NextResponse(null, { status: 404 });
-    }
-
-    // Success!
-    return new NextResponse(buffer, {
-      status: 200,
-      headers: {
-        "Content-Type": type,
-        "Cache-Control": "public, max-age=31536000, immutable",
-        "Access-Control-Allow-Origin": "*",
-      },
+    // Return the response from Python back to the Frontend
+    return new NextResponse(backendResponse.body, {
+      status: backendResponse.status,
+      statusText: backendResponse.statusText,
+      headers: backendResponse.headers,
     });
 
-  } catch (err) {
-    console.error(`[Proxy] Error fetching ${targetUrl.href}:`, err);
-    return new NextResponse(null, { status: 500 });
-  } finally {
-    clearTimeout(timeout);
+  } catch (error) {
+    console.error(`[Proxy Error] Failed to fetch ${targetUrl}:`, error);
+    return new NextResponse(
+      JSON.stringify({ error: "Backend Service Unavailable" }), 
+      { status: 502, headers: { "Content-Type": "application/json" } }
+    );
   }
 }

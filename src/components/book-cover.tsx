@@ -48,16 +48,23 @@ export default function BookCover({ url, urls, title, className }: BookCoverProp
 
   // 4. Proxy Logic
   let srcToRender = currentUrl;
+  
+  // We only proxy Google Books to enforce "Cheap Shields" and fix their weird URL parameters
   if (srcToRender.includes('books.google.com')) {
       let sizeParam = '';
+      
+      // Extract minSize if it exists in the original URL (custom logic)
       if (srcToRender.includes('minSize=')) {
           const match = srcToRender.match(/minSize=(\d+)/);
           if (match) {
               sizeParam = `&minSize=${match[1]}`;
+              // Remove it from the target URL so Google doesn't choke on it
               srcToRender = srcToRender.replace(/&minSize=\d+/, '');
           }
       }
-      srcToRender = `/api-proxy/image?url=${encodeURIComponent(srcToRender)}${sizeParam}`;
+      
+      // 🎯 CRITICAL FIX: Point to the new Isolated Image Proxy
+      srcToRender = `/api/image-proxy?url=${encodeURIComponent(srcToRender)}${sizeParam}`;
   }
 
   // 5. Image Load Handler

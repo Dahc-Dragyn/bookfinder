@@ -8,6 +8,7 @@ set -uo pipefail
 
 # --- CONFIGURATION ---
 BASE_URL="http://localhost:9003"
+#APP_URL="https://bookfinder-frontend-140939405627.us-west1.run.app"
 
 # --- Colors ---
 RED='\033[0;31m'
