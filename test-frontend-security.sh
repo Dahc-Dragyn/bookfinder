@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
 # =============================================================================
 # Bookfinder Frontend Security Test Suite
-# Verifies Middleware "Bouncer", Robots.txt, and Bot Blocking
+# Verifies Middleware "Bouncer", Amazonbot Defense, and Honeypots
 # =============================================================================
 
 set -uo pipefail
 
 # --- CONFIGURATION ---
-# Change this if your local Next.js runs on a different port (e.g., 3000)
 BASE_URL="http://localhost:9003"
 
 # --- Colors ---
@@ -20,7 +19,7 @@ NC='\033[0m'
 echo -e "${YELLOW}
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║             Frontend Security Shield Test (Middleware & Bots)                ║
-║                  Targeting → $BASE_URL                          ║
+║                  Targeting → $BASE_URL                              ║
 ╚══════════════════════════════════════════════════════════════════════════════╝${NC}
 "
 
@@ -45,42 +44,57 @@ check_status() {
 }
 
 # =============================================================================
-# TEST BLOCK 1: The "Bouncer" (Middleware)
+# TEST BLOCK 1: The "Bouncer" (General Bots)
 # =============================================================================
-echo -e "\n${YELLOW}Testing Middleware (Active Blocking)...${NC}"
+echo -e "\n${YELLOW}Testing Middleware (General Bots)...${NC}"
 
 # 1. GPTBot hitting Search (Should be BLOCKED)
-# Logic: Middleware detects 'GPTBot' on '/search' and returns 429.
 check_status "$BASE_URL/search?q=test" "Mozilla/5.0 GPTBot/1.0" "429" "1. GPTBot on /search (Should Block)"
 
 # 2. GPTBot hitting Book Details (Should be BLOCKED)
-# Logic: Middleware detects 'GPTBot' on '/book/...' and returns 429.
 check_status "$BASE_URL/book/9780140449136" "GPTBot/1.0" "429" "2. GPTBot on /book (Should Block)"
 
 # 3. GPTBot hitting Homepage (Should PASS)
-# Logic: We typically ALLOW bots on the homepage so they know the site exists.
 check_status "$BASE_URL/" "GPTBot/1.0" "200" "3. GPTBot on Homepage (Should Allow)"
 
 # 4. Normal User hitting Search (Should PASS)
-# Logic: Chrome/Regular user should NOT be blocked.
 check_status "$BASE_URL/search?q=test" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)" "200" "4. Real Human on /search (Should Allow)"
 
-# 5. Bytespider (TikTok) hitting Search (Should be BLOCKED)
-# Logic: Testing another bad bot from your blacklist.
+# 5. Bytespider hitting Search (Should be BLOCKED)
 check_status "$BASE_URL/search?q=tiktok" "Bytespider" "429" "5. Bytespider on /search (Should Block)"
 
 # =============================================================================
-# TEST BLOCK 2: The "Signage" (Robots.txt & Sitemap)
+# TEST BLOCK 2: The "Amazonbot" Defense (New Priority)
+# =============================================================================
+echo -e "\n${YELLOW}Testing Amazonbot Defense (The Primary Culprit)...${NC}"
+
+# 6. Amazonbot hitting Search (Should be BLOCKED)
+check_status "$BASE_URL/search?q=witches" "Amazonbot/0.1" "429" "6. Amazonbot on /search (Should Block)"
+
+# 7. Amazonbot hitting a Book Page (Should be BLOCKED)
+check_status "$BASE_URL/book/9781663625458" "Amazonbot/0.1" "429" "7. Amazonbot on /book (Should Block)"
+
+# 8. Amazonbot hitting Homepage (Should PASS)
+check_status "$BASE_URL/" "Amazonbot/0.1" "200" "8. Amazonbot on Homepage (Should Allow)"
+
+# =============================================================================
+# TEST BLOCK 3: The Honeypot (Deception Layer)
+# =============================================================================
+echo -e "\n${YELLOW}Testing Behavioral Honeypot (The Trap)...${NC}"
+
+# 9. Triggering the Trap
+check_status "$BASE_URL/wp-admin-trap" "SuspiciousBot/1.0" "500" "9. Hitting /wp-admin-trap (Should error)"
+
+# =============================================================================
+# TEST BLOCK 4: Static Defenses
 # =============================================================================
 echo -e "\n${YELLOW}Testing Static Defenses (Robots & Sitemap)...${NC}"
 
-# 6. Robots.txt Existence
-# Logic: File must exist and return 200.
-check_status "$BASE_URL/robots.txt" "curl/7.64.1" "200" "6. Robots.txt is accessible"
+# 10. Robots.txt Existence
+check_status "$BASE_URL/robots.txt" "curl/7.64.1" "200" "10. Robots.txt is accessible"
 
-# 7. Check Robots.txt Content
-# Logic: grep for the 'Disallow: /search' line.
-printf "${BLUE}%-50s${NC}" "7. Robots.txt disallows /search"
+# 11. Check Robots.txt Content
+printf "${BLUE}%-50s${NC}" "11. Robots.txt disallows /search"
 content=$(curl -s "$BASE_URL/robots.txt")
 if echo "$content" | grep -q "Disallow: /search"; then
   echo -e "${GREEN}PASS${NC}"
@@ -88,8 +102,7 @@ else
   echo -e "${RED}FAIL${NC} (Rule not found in robots.txt)"
 fi
 
-# 8. Sitemap Existence
-# Logic: We direct bots here, so it better work.
-check_status "$BASE_URL/sitemap.xml" "Googlebot/2.1" "200" "8. Sitemap.xml is accessible"
+# 12. Sitemap Existence
+check_status "$BASE_URL/sitemap.xml" "Googlebot/2.1" "200" "12. Sitemap.xml is accessible"
 
 echo -e "\n${GREEN}Test Suite Complete.${NC}"

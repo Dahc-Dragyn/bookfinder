@@ -31,6 +31,18 @@ export default function RootLayout({
       <body className={cn('font-body antialiased')}>
         {children}
         <Toaster />
+
+        {/* --- BEHAVIORAL HONEYPOT --- */}
+        {/* Hidden from humans/screen readers, but visible to scrapers */}
+        <a 
+          href="/wp-admin-trap" 
+          style={{ display: 'none' }} 
+          rel="nofollow" 
+          aria-hidden="true"
+          tabIndex={-1}
+        >
+          Admin Login
+        </a>
       </body>
     </html>
   );
