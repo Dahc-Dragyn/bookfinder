@@ -1,77 +1,141 @@
 import { NextResponse } from "next/server";
 
-// Patterns to identify known placeholder images from Google.
 const GOOGLE_PLACEHOLDER_PATTERNS = [
   "no_cover_thumb.gif",
 ];
 
+// 🛑 Known aggressive bots & AI scrapers
+const BANNED_BOT_STRINGS = [
+  "Amazonbot",
+  "Bytespider",
+  "ClaudeBot",
+  "GPTBot",
+  "CCBot",
+  "ImagesiftBot",
+  "PerplexityBot",
+  "Applebot-Extended",
+  "cohere-ai",
+  "Diffbot",
+  "Omgili",
+  "FacebookBot", 
+];
+
+// Absolute safety limits
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5MB hard cap
+const FETCH_TIMEOUT_MS = 4000; // 4 seconds max
+
 export async function GET(req: Request) {
+  /* ────────────────────────────────
+     1. CHEAP SHIELDS (NO CPU WORK)
+     ──────────────────────────────── */
+  
+  // A. Block known bad bots by name
+  const ua = req.headers.get("user-agent") || "";
+  if (BANNED_BOT_STRINGS.some(bot => ua.includes(bot))) {
+    return new NextResponse("Forbidden", { status: 403 });
+  }
+
+  // B. "Browser-Only" Check (The Pro Move)
+  // Bots (like curl or python scripts) usually fail to send these headers.
+  const secFetch = req.headers.get("sec-fetch-site");
+  const accept = req.headers.get("accept");
+
+  if (!secFetch || !accept?.includes("image")) {
+    // Note: If you test this in a browser tab manually, it might fail. 
+    // It is designed to work for <img> tags on your site.
+    return new NextResponse("Forbidden", { status: 403 });
+  }
+
+  /* ────────────────────────────────
+     2. INPUT VALIDATION
+     ──────────────────────────────── */
+
   const { searchParams } = new URL(req.url);
   const rawUrl = searchParams.get("url");
-  
-  // Relaxed Default: 500 bytes is safer than 2000. 
-  // It still catches 1x1 pixels (approx 43 bytes) but allows valid tiny thumbnails.
-  const minSizeParam = searchParams.get("minSize");
-  const minSizeBytes = minSizeParam ? parseInt(minSizeParam) : 500;
+  const minSizeBytes = parseInt(searchParams.get("minSize") || "500");
 
   if (!rawUrl) {
     return new NextResponse("Missing image URL", { status: 400 });
   }
 
-  const decodedUrl = decodeURIComponent(rawUrl);
+  let targetUrl: URL;
+  try {
+    targetUrl = new URL(decodeURIComponent(rawUrl));
+  } catch {
+    return new NextResponse("Invalid URL", { status: 400 });
+  }
 
-  // Block known Google placeholder URLs immediately.
-  if (decodedUrl.includes("books.google.com") || decodedUrl.includes("googleusercontent.com")) {
-    if (GOOGLE_PLACEHOLDER_PATTERNS.some(p => decodedUrl.includes(p))) {
-       console.warn(`[Proxy] Blocking known Google placeholder: ${decodedUrl}`);
-       return new NextResponse(null, { status: 404 });
+  // Security: Only allow HTTPS
+  if (targetUrl.protocol !== "https:") {
+    return new NextResponse("Only HTTPS allowed", { status: 400 });
+  }
+
+  // Google Specific Cleanup
+  if (
+    targetUrl.hostname.includes("books.google.com") ||
+    targetUrl.hostname.includes("googleusercontent.com")
+  ) {
+    // Block known "No Cover" placeholders to save bandwidth
+    if (GOOGLE_PLACEHOLDER_PATTERNS.some(p => targetUrl.href.includes(p))) {
+      return new NextResponse(null, { status: 404 });
     }
+    // Remove the 'edge=curl' param which causes issues
+    targetUrl.searchParams.delete("edge");
   }
-  
-  // Clean up URL: ensure HTTPS and remove problematic Google Books parameters.
-  let targetUrl = rawUrl.replace("http://", "https://");
-  if (targetUrl.includes("books.google.com")) {
-    targetUrl = targetUrl.replace("&edge=curl", "");
-  }
+
+  /* ────────────────────────────────
+     3. SINGLE FETCH (OPTIMIZED)
+     ──────────────────────────────── */
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
   try {
-    const response = await fetch(targetUrl, {
+    const response = await fetch(targetUrl.href, {
       headers: {
-        // Use a generic User-Agent to avoid Google blocking "bot-like" requests
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+        // We pretend to be a standard browser to avoid upstream blocking
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
       },
+      signal: controller.signal,
     });
 
     if (!response.ok) {
-      console.warn(`[Proxy] Upstream fetch failed with status ${response.status} for: ${targetUrl}`);
       return new NextResponse(null, { status: response.status });
     }
 
-    const contentType = response.headers.get("content-type") || "";
-    if (!contentType.startsWith("image/")) {
-      console.warn(`[Proxy] Invalid content-type "${contentType}" for: ${targetUrl}`);
+    // A. Check Headers BEFORE downloading the body (Saves Bandwidth)
+    const type = response.headers.get("content-type") || "";
+    if (!type.startsWith("image/")) {
       return new NextResponse(null, { status: 404 });
     }
 
+    const contentLength = parseInt(response.headers.get("content-length") || "0");
+    if (contentLength > MAX_IMAGE_BYTES) {
+      return new NextResponse(null, { status: 404 });
+    }
+
+    // B. Download the Buffer
     const buffer = Buffer.from(await response.arrayBuffer());
 
-    // Dynamic Size Filter
-    if (buffer.byteLength < minSizeBytes) {
-      console.warn(`[Proxy] Image too small (${buffer.byteLength}b < ${minSizeBytes}b) for: ${targetUrl}`);
+    // C. Final Size Check (In case Content-Length was fake)
+    if (buffer.byteLength < minSizeBytes || buffer.byteLength > MAX_IMAGE_BYTES) {
       return new NextResponse(null, { status: 404 });
     }
 
-    // Success: Return the valid image with long-cache headers.
+    // Success!
     return new NextResponse(buffer, {
       status: 200,
       headers: {
-        "Content-Type": contentType,
+        "Content-Type": type,
         "Cache-Control": "public, max-age=31536000, immutable",
         "Access-Control-Allow-Origin": "*",
       },
     });
+
   } catch (err) {
-    console.error(`[Proxy] Fatal fetch error for ${targetUrl}:`, err);
+    console.error(`[Proxy] Error fetching ${targetUrl.href}:`, err);
     return new NextResponse(null, { status: 500 });
+  } finally {
+    clearTimeout(timeout);
   }
 }
